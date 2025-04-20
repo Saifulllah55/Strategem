@@ -25,7 +25,7 @@ export const login = async (req, res) => {
     res.status(200).json({
       _id: existingUser._id,
       email: existingUser.email,
-      fullName: existingUser.fullName,
+      username: existingUser.username,
       profilePic: existingUser.profilePic,
     });
   } catch (error) {
@@ -37,7 +37,7 @@ export const login = async (req, res) => {
 export const signup = async (req, res) => {
   try {
     // defragmenting the request
-    const { email, fullName, password, profilePic } = req.body;
+    const { email, username, password, profilePic } = req.body;
     // making sure password is 6 characters
     if (password.length < 6) {
       return res
@@ -58,7 +58,7 @@ export const signup = async (req, res) => {
     // creating new user
     const newUser = new User({
       email,
-      fullName,
+      username,
       password: hashedPassword,
       profilePic,
     });
@@ -72,7 +72,7 @@ export const signup = async (req, res) => {
       res.status(201).json({
         _id: newUser._id,
         email: newUser.email,
-        fullName: newUser.fullName,
+        username: newUser.username,
         profilePic: newUser.profilePic,
         //can we simply put newUser here?
       });
