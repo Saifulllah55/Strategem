@@ -1,12 +1,19 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../lib/axios";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import logo from "../assets/logo.png";
+import { useDispatch, useSelector } from "react-redux";
+import { loginUser } from "../Store/features/userSlice";
 
 const AuthForm = ({ signUp }) => {
   const [isSignup, setIsSignup] = useState(false);
 
   let navigate = useNavigate();
+
+  const dispatch = useDispatch();
+
+  const location = useLocation();
+  const from = location.state?.from?.pathname || "/dashboard";
 
   useEffect(() => {
     setIsSignup(signUp);
@@ -35,27 +42,15 @@ const AuthForm = ({ signUp }) => {
           password: credentials.password,
         };
 
-    console.log(payload);
-
-    try {
-      const { data } = await api.post(endpoint, payload);
-      setResponseMsg(`Success: ${data.message || "Authenticated"}`);
-      navigate("/home");
-
-      if (data.token) {
-        localStorage.setItem("authToken", data.token);
-      }
-    } catch (err) {
-      const msg =
-        err.response?.data?.message || err.message || "Authentication failed";
-      setResponseMsg(`Error: ${msg}`);
+    const success = await dispatch(loginUser(payload));
+    if (success) {
+      navigate(from, { replace: true });
     }
   };
 
   return (
     <div className="flex justify-center items-center min-h-screen ">
       <div className="flex bg-white rounded-lg shadow-lg overflow-hidden max-w-4xl w-full">
-
         <div className="w-1/2">
           <img
             src={logo}
