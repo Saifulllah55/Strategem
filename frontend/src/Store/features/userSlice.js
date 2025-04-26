@@ -28,6 +28,10 @@ const userSlice = createSlice({
       state.user = null;
       localStorage.removeItem("user");
     },
+    setUser: (state, action) => {
+      state.user = action.payload;
+      localStorage.setItem("user", JSON.stringify(state.user)); 
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -38,6 +42,7 @@ const userSlice = createSlice({
       .addCase(loginUser.fulfilled, (state, action) => {
         state.loading = false;
         state.user = action.payload;
+        localStorage.setItem("user", JSON.stringify(state.user));
         state.error = null;
       })
       .addCase(loginUser.rejected, (state, action) => {
@@ -47,5 +52,5 @@ const userSlice = createSlice({
   },
 });
 
-export const { logoutUser } = userSlice.actions;
+export const { logoutUser, setUser } = userSlice.actions;
 export default userSlice.reducer;

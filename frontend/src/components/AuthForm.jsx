@@ -15,6 +15,8 @@ const AuthForm = ({ signUp }) => {
   const location = useLocation();
   const from = location.state?.from?.pathname || "/dashboard";
 
+  console.log(location.state?.from?.pathname);
+
   useEffect(() => {
     setIsSignup(signUp);
   }, []);
