@@ -1,20 +1,57 @@
-import { useState } from "react";
+import { useEffect } from "react";
 
-import AuthForm from "./components/AuthForm";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import LoginPage from "./pages/LoginPage";
-import Home from "./pages/Home";
+import HomePage from "./pages/HomePage";
+import LandingPage from "./pages/LandingPage";
+import Dashboard from "./components/Dashboard";
+import CreatePage from "./pages/CreatePage";
+import PrivateRoute from "./components/PrivateRoute";
+import { useDispatch } from "react-redux";
+import { setUser } from "./Store/features/userSlice";
+
 
 function App() {
-  const [count, setCount] = useState(0);
+
+  const dispatch = useDispatch();
+
+  useEffect(() => {
+    const localUser = localStorage.getItem("user");
+    if (localUser) {
+      try {
+        const parsedUser = JSON.parse(localUser);
+        dispatch(setUser(parsedUser));
+      } catch (err) {
+        console.error("Failed to parse user from localStorage", err);
+      }
+    }
+  }, [dispatch]);
 
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<LoginPage signUp={false}/>} />
-        <Route path="/home" element={<Home/>} />
-      </Routes>
-    </BrowserRouter>
+
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<LandingPage />}></Route>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/home" element={<HomePage></HomePage>}></Route>
+          <Route
+            path="/dashboard"
+            element={
+              <PrivateRoute>
+                <Dashboard />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/create"
+            element={
+              <PrivateRoute>
+                <CreatePage />
+              </PrivateRoute>
+            }
+          ></Route>
+        </Routes>
+      </BrowserRouter>
   );
 }
 
