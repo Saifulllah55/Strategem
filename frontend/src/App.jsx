@@ -10,6 +10,7 @@ import { useDispatch } from "react-redux";
 import { setUser } from "./Store/features/userSlice";
 import LoginPage from "./pages/LoginPage";
 import SignupForm from "./components/SignupForm";
+import ProjectPage from "./pages/ProjectPage";
 
 
 function App() {
@@ -46,10 +47,10 @@ function App() {
             }
           />
           <Route
-            path="/create"
+            path="/dashboard/:id/project/:projectname"
             element={
               <PrivateRoute>
-                <CreatePage />
+                <ProjectPage />
               </PrivateRoute>
             }
           ></Route>
