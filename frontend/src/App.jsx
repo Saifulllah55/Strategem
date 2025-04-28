@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 
 import { BrowserRouter, Route, Routes } from "react-router-dom";
-import LoginPage from "./pages/LoginPage";
 import HomePage from "./pages/HomePage";
 import LandingPage from "./pages/LandingPage";
 import Dashboard from "./components/Dashboard";
@@ -9,6 +8,9 @@ import CreatePage from "./pages/CreatePage";
 import PrivateRoute from "./components/PrivateRoute";
 import { useDispatch } from "react-redux";
 import { setUser } from "./Store/features/userSlice";
+import LoginPage from "./pages/LoginPage";
+import SignupForm from "./components/SignupForm";
+import ProjectPage from "./pages/ProjectPage";
 
 
 function App() {
@@ -34,8 +36,10 @@ function App() {
           <Route path="/" element={<LandingPage />}></Route>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/home" element={<HomePage></HomePage>}></Route>
+          <Route path="/signup" element={<SignupForm/>}></Route>
+          
           <Route
-            path="/dashboard"
+            path="/dashboard/:id"
             element={
               <PrivateRoute>
                 <Dashboard />
@@ -43,10 +47,10 @@ function App() {
             }
           />
           <Route
-            path="/create"
+            path="/dashboard/:id/project/:projectname"
             element={
               <PrivateRoute>
-                <CreatePage />
+                <ProjectPage />
               </PrivateRoute>
             }
           ></Route>

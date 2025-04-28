@@ -26,7 +26,7 @@ export const signupUser = createAsyncThunk(
   async (userCredentials, thunkAPI) => {
     try {
       console.log("User credentials: (try signup)", userCredentials);
-      const response = await api.post("/signup", userCredentials);
+      const response = await api.post("/auth/signup", userCredentials);
       localStorage.setItem("user", JSON.stringify(response.data));
 
       return response.data;
