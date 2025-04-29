@@ -8,13 +8,10 @@ import CreatePage from "./pages/CreatePage";
 import PrivateRoute from "./components/PrivateRoute";
 import { useDispatch } from "react-redux";
 import { setUser } from "./Store/features/userSlice";
-import LoginPage from "./pages/LoginPage";
-import SignupForm from "./components/SignupForm";
-import ProjectPage from "./pages/ProjectPage";
+import LoginPage from "./pages/LoginPage"
 
 
 function App() {
-
   const dispatch = useDispatch();
 
   useEffect(() => {
@@ -25,9 +22,13 @@ function App() {
         dispatch(setUser(parsedUser));
       } catch (err) {
         console.error("Failed to parse user from localStorage", err);
+        dispatch(setUser(null)); 
       }
+    } else {
+      dispatch(setUser(null));
     }
   }, [dispatch]);
+  
 
   return (
 
@@ -36,10 +37,8 @@ function App() {
           <Route path="/" element={<LandingPage />}></Route>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/home" element={<HomePage></HomePage>}></Route>
-          <Route path="/signup" element={<SignupForm/>}></Route>
-          
           <Route
-            path="/dashboard/:id"
+            path="/dashboard"
             element={
               <PrivateRoute>
                 <Dashboard />
@@ -47,10 +46,10 @@ function App() {
             }
           />
           <Route
-            path="/dashboard/:id/project/:projectname"
+            path="/create"
             element={
               <PrivateRoute>
-                <ProjectPage />
+                <CreatePage />
               </PrivateRoute>
             }
           ></Route>

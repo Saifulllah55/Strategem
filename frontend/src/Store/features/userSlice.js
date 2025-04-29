@@ -1,16 +1,13 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import { api } from "../../lib/axios";
 
-console.log("userslice js(FE)");
 export const loginUser = createAsyncThunk(
   "user/loginUser",
   async (userCredentials, thunkAPI) => {
     try {
-      console.log("User credentials: (try1)", userCredentials);
       const response = await api.post("/auth/login", userCredentials);
       localStorage.setItem("user", JSON.stringify(response.data));
 
-      console.log("try2");
       return response.data;
     } catch (error) {
       return thunkAPI.rejectWithValue(
@@ -20,12 +17,10 @@ export const loginUser = createAsyncThunk(
   }
 );
 
-// Signup user
 export const signupUser = createAsyncThunk(
   "user/signupUser",
   async (userCredentials, thunkAPI) => {
     try {
-      console.log("User credentials: (try signup)", userCredentials);
       const response = await api.post("/auth/signup", userCredentials);
       localStorage.setItem("user", JSON.stringify(response.data));
 
@@ -38,23 +33,23 @@ export const signupUser = createAsyncThunk(
   }
 );
 
-
-
 const userSlice = createSlice({
   name: "user",
   initialState: {
-    loading: false,
+    loading: true,
     user: null,
     error: null,
   },
   reducers: {
     logoutUser: (state) => {
       state.user = null;
+      state.loading = false;
       localStorage.removeItem("user");
     },
     setUser: (state, action) => {
       state.user = action.payload;
-      localStorage.setItem("user", JSON.stringify(state.user)); 
+      state.loading = false;
+      localStorage.setItem("user", JSON.stringify(state.user));
     },
   },
   extraReducers: (builder) => {

@@ -31,9 +31,8 @@ import store from "./Store/store";
 createRoot(document.getElementById("root")).render(
   <StrictMode>
     <Provider store={store}>
-    {/* <RouterProvider router={router} /> */}
-    <App></App>
+      {/* <RouterProvider router={router} /> */}
+      <App></App>
     </Provider>
-
   </StrictMode>
 );

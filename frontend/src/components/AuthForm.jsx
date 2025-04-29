@@ -6,6 +6,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { loginUser } from "../Store/features/userSlice";
 
 const AuthForm = ({ signUp }) => {
+  
   const [isSignup, setIsSignup] = useState(false);
 
   let navigate = useNavigate();
