@@ -1,5 +1,5 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
-import { api } from "../../lib/axios";
+import api from "../../lib/axios";
 
 export const loginUser = createAsyncThunk(
   "user/loginUser",
@@ -82,10 +82,8 @@ const userSlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       });
-
   },
 });
-
 
 export const { logoutUser, setUser } = userSlice.actions;
 export default userSlice.reducer;

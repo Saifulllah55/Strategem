@@ -4,6 +4,6 @@ import { protectRoute } from "../middleware/auth.middleware.js";
 
 const router = express.Router();
 
-router.post("/create", createProject);
+router.post("/create", protectRoute, createProject);
 
 export default router;

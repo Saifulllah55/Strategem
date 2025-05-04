@@ -1,23 +1,73 @@
 import mongoose from "mongoose";
 
-const projectSchema = mongoose.Schema({
-  name: { type: String, required: true },
-  description: { type: String },
-  owner: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-  members: [
-    {
-      user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-      role: {
-        type: String,
-        enum: ["lead", "member", "viewer"],
-        default: "member",
-      },
-      joinedAt: { type: Date, default: Date.now },
+const projectSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: true,
     },
-  ],
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now },
-});
+    description: {
+      type: String,
+      default: "",
+    },
+    owner: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    members: [
+      {
+        user: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
+        role: {
+          type: String,
+          enum: ["lead", "member", "viewer"],
+          default: "member",
+        },
+        joinedAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
+    tools: {
+      messageBoard: {
+        type: Boolean,
+        default: false,
+      },
+      todos: {
+        type: Boolean,
+        default: false,
+      },
+      docsFiles: {
+        type: Boolean,
+        default: false,
+      },
+      chat: {
+        type: Boolean,
+        default: false,
+      },
+      schedule: {
+        type: Boolean,
+        default: false,
+      },
+      cardTable: {
+        type: Boolean,
+        default: false,
+      },
+    },
+    tasks: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Task",
+      },
+    ],
+  },
+  { timestamps: true }
+);
 
 const Project = mongoose.model("Project", projectSchema);
 

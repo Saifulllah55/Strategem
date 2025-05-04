@@ -3,6 +3,7 @@ import cors from "cors";
 
 import authRoutes from "../routes/auth.route.js";
 import projectRoutes from "../routes/project.route.js";
+import usersRoutes from "../routes/users.route.js"
 
 import { connectDB } from "../lib/database.js";
 import dotenv from "dotenv";
@@ -24,7 +25,9 @@ dotenv.config();
 
 app.use("/api/auth", authRoutes);
 
-app.use("/api/project", projectRoutes);
+app.use("/api/projects", projectRoutes);
+
+app.use("/api/users/",usersRoutes)
 
 app.listen(5000, () => {
   console.log("Server is running on port 5000");

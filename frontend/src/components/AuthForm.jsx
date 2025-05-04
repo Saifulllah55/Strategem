@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from "react";
-import { api } from "../lib/axios";
 import { useLocation, useNavigate } from "react-router-dom";
 import logo from "../assets/logo.png";
 import { useDispatch, useSelector } from "react-redux";
