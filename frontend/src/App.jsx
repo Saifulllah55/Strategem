@@ -8,6 +8,8 @@ import PrivateRoute from "./components/PrivateRoute";
 import { useDispatch } from "react-redux";
 import { setUser } from "./Store/features/userSlice";
 import LoginPage from "./pages/LoginPage";
+import ProjectPage from "./pages/ProjectPage";
+import { fetchProjects } from "./Store/features/projectSlice";
 
 function App() {
   const dispatch = useDispatch();
@@ -27,6 +29,10 @@ function App() {
     }
   }, [dispatch]);
 
+  useEffect(() => {
+    dispatch(fetchProjects());
+  }, [dispatch]);
+
   return (
     <BrowserRouter>
       <Routes>
@@ -41,7 +47,15 @@ function App() {
             </PrivateRoute>
           }
         />
-        <Route path="/create" element={<PrivateRoute><CreatePage /></PrivateRoute>}></Route>
+        <Route
+          path="/create"
+          element={
+            <PrivateRoute>
+              <CreatePage />
+            </PrivateRoute>
+          }
+        ></Route>
+        <Route path="/project/:projectId" element={<ProjectPage />} />
       </Routes>
     </BrowserRouter>
   );

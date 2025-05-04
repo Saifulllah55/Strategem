@@ -1,24 +1,34 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "./NavBar";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
+import { fetchProjects } from "../Store/features/projectSlice";
 
 const Dashboard = () => {
-  const user = useSelector((state) => state.user.user);
+  const dispatch = useDispatch();
   const navigate = useNavigate();
 
-  const [projects, setProjects] = useState([]);
+  const user = useSelector((state) => state.user.user);
+  const { projects, fetchLoading, fetchError } = useSelector(
+    (state) => state.projects
+  );
+
   const [showModal, setShowModal] = useState(false);
   const [newProjectTitle, setNewProjectTitle] = useState("");
   const [newProjectDescription, setNewProjectDescription] = useState("");
   const [newProjectPeople, setNewProjectPeople] = useState("");
 
+  useEffect(() => {
+    dispatch(fetchProjects());
+  }, [dispatch]);
+
   if (!user) {
     return <div>Loading user data...</div>;
   }
 
-  const handleOpenBoard = (projectTitle) => {
-    navigate(`/dashboard/${user.username}/project/${encodeURIComponent(projectTitle)}`);
+  const handleOpenBoard = (projectId) => {
+    // navigate(`/dashboard/${user.username}/project/${encodeURIComponent(projectTitle)}`);(
+    navigate(`/project/${projectId}`);
   };
 
   const handleAddProject = () => {
@@ -31,15 +41,16 @@ const Dashboard = () => {
       return;
     }
 
+    // This is just for temporary frontend state unless handled via Redux create thunk
     const newProject = {
       title: newProjectTitle,
       description: newProjectDescription,
       people: newProjectPeople.split(",").map((person) => person.trim()),
     };
 
-    setProjects((prevProjects) => [...prevProjects, newProject]);
+    // Show success in UI but ideally you'd dispatch a thunk here
+    alert("Project will be created (add Redux dispatch logic to persist it)");
 
-    // Clear inputs and close modal
     setNewProjectTitle("");
     setNewProjectDescription("");
     setNewProjectPeople("");
@@ -60,24 +71,33 @@ const Dashboard = () => {
           </button>
         </div>
 
-        {/* Projects Grid */}
+        {fetchLoading && <p>Loading projects...</p>}
+        {fetchError && <p className="text-red-500">Error: {fetchError}</p>}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {projects.map((project, index) => (
             <div
-              key={index}
+              key={project._id || index}
               className="bg-gradient-to-br from-zinc-900 to-zinc-800 p-6 rounded-2xl shadow-md hover:shadow-lg transition duration-300"
             >
               <div className="flex justify-between items-start mb-4">
-                <h3 className="text-xl font-semibold">{project.title}</h3>
-                <button className="text-red-400 hover:text-red-500 text-lg">✕</button>
+                <h3 className="text-xl font-semibold">
+                  {project.name || project.title}
+                </h3>
+                <button className="text-red-400 hover:text-red-500 text-lg">
+                  ✕
+                </button>
               </div>
               <p className="text-gray-400 mb-4">{project.description}</p>
               <p className="text-sm text-gray-400 mb-6">
-                People: {project.people.join(", ")}
+                People:{" "}
+                {project.members
+                  ?.map((m) => m.user?.name || m.user)
+                  .join(", ") || "-"}
               </p>
               <div className="flex gap-2">
                 <button
-                  onClick={() => handleOpenBoard(project.title)}
+                  onClick={() => handleOpenBoard(project._id)}
                   className="bg-cyan-600 hover:bg-cyan-500 px-4 py-2 text-sm rounded-md font-semibold text-black"
                 >
                   Open Board
@@ -95,7 +115,9 @@ const Dashboard = () => {
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50">
           <div className="bg-zinc-900 p-8 rounded-2xl w-96">
-            <h3 className="text-2xl font-bold mb-6 text-center">Create New Project</h3>
+            <h3 className="text-2xl font-bold mb-6 text-center">
+              Create New Project
+            </h3>
             <div className="flex flex-col gap-4">
               <input
                 type="text"
@@ -141,11 +163,6 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
-
-
-
-
-
 
 // import Navbar from "./NavBar";
 // import { useSelector } from "react-redux";
