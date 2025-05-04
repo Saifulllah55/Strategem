@@ -16,10 +16,11 @@ import {
   Add as AddIcon,
   AccessTime as TimeIcon
 } from '@mui/icons-material';
-import { useAuth } from '../../context/AuthContext';
+import { useApp } from '../../context/AppContext';
+import { reportAPI } from '../../api';
 
 const Dashboard = () => {
-  const { user } = useAuth();
+  const { initialized } = useApp();
   const [projects, setProjects] = useState([]);
   const [stats, setStats] = useState({
     totalProjects: 0,
@@ -27,87 +28,54 @@ const Dashboard = () => {
     pendingTasks: 0,
     upcomingDeadlines: 0
   });
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Simulate fetching projects from an API
-    const fetchProjects = async () => {
-      // This would be an API call in a real app
-      // For now, we'll use mock data
-      const mockProjects = [
-        {
-          id: 1,
-          title: 'Website Redesign',
-          description: 'Redesign the company website with modern UI components',
-          progress: 75,
-          dueDate: '2025-05-30',
-          team: [
-            { id: 1, name: 'John Doe', avatar: null },
-            { id: 2, name: 'Jane Smith', avatar: null },
-            { id: 3, name: 'Bob Johnson', avatar: null }
-          ],
-          tasksCompleted: 15,
-          totalTasks: 20
-        },
-        {
-          id: 2,
-          title: 'Mobile App Development',
-          description: 'Develop a mobile application for iOS and Android platforms',
-          progress: 40,
-          dueDate: '2025-07-15',
-          team: [
-            { id: 1, name: 'John Doe', avatar: null },
-            { id: 4, name: 'Alice Brown', avatar: null }
-          ],
-          tasksCompleted: 8,
-          totalTasks: 20
-        },
-        {
-          id: 3,
-          title: 'Marketing Campaign',
-          description: 'Plan and execute Q2 marketing campaign',
-          progress: 20,
-          dueDate: '2025-06-10',
-          team: [
-            { id: 2, name: 'Jane Smith', avatar: null },
-            { id: 5, name: 'Charlie Davis', avatar: null }
-          ],
-          tasksCompleted: 3,
-          totalTasks: 15
-        },
-        {
-          id: 4,
-          title: 'Database Migration',
-          description: 'Migrate data from legacy system to new cloud platform',
-          progress: 60,
-          dueDate: '2025-05-20',
-          team: [
-            { id: 1, name: 'John Doe', avatar: null },
-            { id: 3, name: 'Bob Johnson', avatar: null },
-            { id: 6, name: 'Eva Wilson', avatar: null }
-          ],
-          tasksCompleted: 12,
-          totalTasks: 20
+    // Fetch dashboard data from the local storage API
+    const fetchDashboardData = async () => {
+      try {
+        setLoading(true);
+        const response = await reportAPI.getDashboardData();
+        
+        if (response.data) {
+          const { recentProjects, stats } = response.data;
+          
+          // Format projects for display
+          const formattedProjects = recentProjects.map(project => ({
+            id: project.id,
+            title: project.title,
+            description: project.description || 'No description provided',
+            progress: project.progress || 0,
+            dueDate: project.dueDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+            team: [
+              { id: 1, name: 'John Doe', avatar: null },
+              { id: 2, name: 'Jane Smith', avatar: null }
+            ],
+            tasksCompleted: project.completedTasksCount || 0,
+            totalTasks: project.tasksCount || 0
+          }));
+          
+          setProjects(formattedProjects);
+          
+          // Set dashboard stats
+          setStats({
+            totalProjects: stats.totalProjects || 0,
+            completedProjects: Math.round((stats.completedTasks / stats.totalTasks) * 100) / 100 || 0,
+            pendingTasks: stats.pendingTasks || 0,
+            upcomingDeadlines: response.data.upcomingDeadlines?.length || 0
+          });
         }
-      ];
-      
-      setProjects(mockProjects);
-      
-      // Calculate stats
-      setStats({
-        totalProjects: mockProjects.length,
-        completedProjects: mockProjects.filter(p => p.progress === 100).length,
-        pendingTasks: mockProjects.reduce((acc, curr) => acc + (curr.totalTasks - curr.tasksCompleted), 0),
-        upcomingDeadlines: mockProjects.filter(p => {
-          const dueDate = new Date(p.dueDate);
-          const now = new Date();
-          const diffDays = Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24));
-          return diffDays <= 14 && diffDays > 0;
-        }).length
-      });
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+      } finally {
+        setLoading(false);
+      }
     };
     
-    fetchProjects();
-  }, []);
+    if (initialized) {
+      fetchDashboardData();
+    }
+  }, [initialized]);
 
   const getStatusColor = (progress) => {
     if (progress < 30) return 'error';
@@ -124,7 +92,7 @@ const Dashboard = () => {
     <Box>
       <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography variant="h4" sx={{ fontWeight: 'medium' }}>
-          Welcome, {user?.name}
+          Welcome to Stratagem
         </Typography>
         <Button 
           variant="contained" 

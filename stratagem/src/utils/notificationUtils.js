@@ -1,20 +1,25 @@
-// Notification utility functions for managing task reminders
+/**
+ * Utility functions for handling browser notifications
+ */
 
-// Function to check if Notification API is available and permission is granted
-const checkNotificationPermission = async () => {
+/**
+ * Check if browser notifications are supported and request permission if needed
+ * @returns {Promise<boolean>} Whether notification permission is granted
+ */
+export const checkNotificationPermission = async () => {
   // Check if the browser supports notifications
   if (!('Notification' in window)) {
-    console.error('This browser does not support desktop notifications');
+    console.error('This browser does not support notifications');
     return false;
   }
 
-  // Check if permission is already granted
+  // Check notification permission status
   if (Notification.permission === 'granted') {
     return true;
   }
 
-  // Request permission if it's not denied
   if (Notification.permission !== 'denied') {
+    // Request permission
     const permission = await Notification.requestPermission();
     return permission === 'granted';
   }
@@ -22,33 +27,43 @@ const checkNotificationPermission = async () => {
   return false;
 };
 
-// Function to send a notification for a task
-const sendTaskNotification = async (task) => {
-  const hasPermission = await checkNotificationPermission();
-  
-  if (!hasPermission) {
+/**
+ * Send a browser notification
+ * @param {string} title - The notification title
+ * @param {Object} options - Notification options like body, icon, etc.
+ * @returns {boolean} Whether the notification was sent successfully
+ */
+export const sendNotification = (title, options = {}) => {
+  if (!('Notification' in window)) {
+    console.error('This browser does not support notifications');
+    return false;
+  }
+
+  if (Notification.permission !== 'granted') {
     console.warn('Notification permission not granted');
     return false;
   }
 
   try {
-    const notification = new Notification(`Task Due Soon: ${task.title}`, {
-      body: `The task "${task.title}" is due in 24 hours (${new Date(task.dueDate).toLocaleString()})`,
-      icon: '/vite.svg', // Default icon
-      tag: `task-reminder-${task.id}`, // Prevents duplicate notifications
-      requireInteraction: true // Notification persists until user interacts with it
-    });
-
-    notification.onclick = () => {
-      // Focus on window and navigate to the task
-      window.focus();
-      if (task.projectId) {
-        window.location.href = `/tasks?project=${task.projectId}&task=${task.id}`;
-      } else {
-        window.location.href = `/tasks?task=${task.id}`;
-      }
-      notification.close();
+    // Default options merged with provided options
+    const defaultOptions = {
+      body: 'You have a new notification',
+      icon: '/favicon.ico',
+      badge: '/favicon.ico',
     };
+
+    const notification = new Notification(title, { ...defaultOptions, ...options });
+
+    // Add click event if provided
+    if (options.onClick && typeof options.onClick === 'function') {
+      notification.onclick = options.onClick;
+    } else {
+      // Default click behavior: focus on window
+      notification.onclick = () => {
+        window.focus();
+        notification.close();
+      };
+    }
 
     return true;
   } catch (error) {
@@ -57,40 +72,98 @@ const sendTaskNotification = async (task) => {
   }
 };
 
-// Function to send email reminders (placeholder for backend integration)
-const sendEmailReminder = async (task, user) => {
-  // In a real application, this would call a backend API to send an email
-  console.log(`[Email Reminder] To: ${user.email}, Task: ${task.title} due on ${new Date(task.dueDate).toLocaleString()}`);
-  return true;
+/**
+ * Schedule a notification to be shown at a later time
+ * @param {string} title - Notification title
+ * @param {Object} options - Notification options
+ * @param {Date|number} triggerTime - When to show the notification (Date object or timestamp)
+ * @returns {number} Timer ID that can be used to cancel the notification
+ */
+export const scheduleNotification = (title, options = {}, triggerTime) => {
+  if (!triggerTime) {
+    console.error('No trigger time provided for scheduled notification');
+    return null;
+  }
+
+  let delay;
+  if (triggerTime instanceof Date) {
+    delay = triggerTime.getTime() - Date.now();
+  } else if (typeof triggerTime === 'number') {
+    delay = triggerTime;
+  } else {
+    console.error('Invalid trigger time format');
+    return null;
+  }
+
+  // Ensure delay is at least 0 (don't schedule in the past)
+  delay = Math.max(0, delay);
+
+  // Schedule the notification
+  const timerId = setTimeout(() => {
+    sendNotification(title, options);
+  }, delay);
+
+  return timerId;
 };
 
-// Function to check tasks and send reminders for those due within 24 hours
-const checkAndSendReminders = (tasks, user) => {
-  if (!tasks || tasks.length === 0) return [];
-  
+/**
+ * Cancel a scheduled notification
+ * @param {number} timerId - The timer ID returned by scheduleNotification
+ */
+export const cancelScheduledNotification = (timerId) => {
+  if (timerId) {
+    clearTimeout(timerId);
+  }
+};
+
+/**
+ * Check for and trigger any pending notifications
+ * This should be called regularly (e.g., when app starts or using setInterval)
+ * @param {Array} reminders - Array of reminder objects
+ * @returns {Array} IDs of reminders that were triggered
+ */
+export const checkAndTriggerReminders = (reminders) => {
+  if (!Array.isArray(reminders) || reminders.length === 0) {
+    return [];
+  }
+
   const now = new Date();
-  const tomorrow = new Date(now);
-  tomorrow.setHours(now.getHours() + 24);
-  
-  const tasksToRemind = tasks.filter(task => {
-    if (task.completed) return false;
-    
-    const dueDate = new Date(task.dueDate);
-    return dueDate > now && dueDate <= tomorrow;
-  });
-  
-  // Send notifications for each task due within 24 hours
-  tasksToRemind.forEach(task => {
-    sendTaskNotification(task);
-    sendEmailReminder(task, user);
-  });
-  
-  return tasksToRemind;
-};
+  const triggeredReminderIds = [];
 
-export { 
-  checkNotificationPermission, 
-  sendTaskNotification, 
-  sendEmailReminder, 
-  checkAndSendReminders 
+  reminders.forEach(reminder => {
+    // Skip if already sent or failed
+    if (reminder.status !== 'pending') {
+      return;
+    }
+
+    // Get the time the reminder should be sent
+    let sendTime;
+    if (reminder.sendAt) {
+      sendTime = new Date(reminder.sendAt);
+    } else if (reminder.customDate) {
+      sendTime = new Date(reminder.customDate);
+    } else {
+      // Can't determine when to send, skip
+      return;
+    }
+
+    // Check if it's time to send the notification
+    if (sendTime <= now) {
+      // Send the notification
+      const success = sendNotification(
+        reminder.title, 
+        {
+          body: reminder.message,
+          icon: '/notification-icon.png',
+          data: { reminderId: reminder.id, taskId: reminder.taskId }
+        }
+      );
+
+      if (success) {
+        triggeredReminderIds.push(reminder.id);
+      }
+    }
+  });
+
+  return triggeredReminderIds;
 };

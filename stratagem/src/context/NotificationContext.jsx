@@ -1,7 +1,10 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { useAuth } from './AuthContext';
-import { checkNotificationPermission, checkAndSendReminders } from '../utils/notificationUtils';
-import { taskAPI } from '../api';
+import { 
+  checkNotificationPermission, 
+  checkAndTriggerReminders, 
+  sendNotification 
+} from '../utils/notificationUtils';
+import { taskAPI, reminderAPI, projectAPI } from '../api';
 
 // Create notification context
 const NotificationContext = createContext(null);
@@ -11,7 +14,6 @@ export const useNotification = () => useContext(NotificationContext);
 
 // Notification provider component
 export const NotificationProvider = ({ children }) => {
-  const { user } = useAuth();
   const [hasPermission, setHasPermission] = useState(false);
   const [reminders, setReminders] = useState([]);
   const [tasks, setTasks] = useState([]);
@@ -28,27 +30,30 @@ export const NotificationProvider = ({ children }) => {
     checkPermission();
   }, []);
 
-  // Fetch tasks from real API
+  // Fetch tasks and projects
   useEffect(() => {
-    if (!user) return;
-
-    const fetchTasks = async () => {
+    const fetchData = async () => {
       try {
         setLoading(true);
-        const response = await taskAPI.getAllTasks();
+        const tasksResponse = await taskAPI.getAllTasks();
+        const projectsResponse = await projectAPI.getAllProjects();
+        
+        const projects = projectsResponse.data || [];
         
         // Transform tasks to the format needed for notifications
-        const formattedTasks = response.data.map(task => ({
-          id: task._id,
-          title: task.title,
-          description: task.description,
-          projectId: task.project._id,
-          projectTitle: task.project.title,
-          assignees: task.assignees.map(assignee => assignee._id),
-          dueDate: task.dueDate,
-          completed: task.completed,
-          priority: task.priority
-        }));
+        const formattedTasks = tasksResponse.data.map(task => {
+          const project = projects.find(p => p.id === task.projectId) || { title: 'Unknown Project' };
+          return {
+            id: task.id,
+            title: task.title,
+            description: task.description || '',
+            projectId: task.projectId,
+            projectTitle: project.title,
+            dueDate: task.dueDate,
+            completed: task.status === 'completed',
+            priority: task.priority || 'medium'
+          };
+        });
         
         setTasks(formattedTasks);
         setError(null);
@@ -60,66 +65,172 @@ export const NotificationProvider = ({ children }) => {
       }
     };
 
-    fetchTasks();
-  }, [user]);
+    fetchData();
+    
+    // Refresh data every 5 minutes
+    const intervalId = setInterval(fetchData, 5 * 60 * 1000);
+    return () => clearInterval(intervalId);
+  }, []);
 
-  // Check for reminders when tasks change
+  // Check for reminders and trigger notifications
   useEffect(() => {
-    if (!user || tasks.length === 0 || loading) return;
+    if (!hasPermission || tasks.length === 0 || loading) return;
     
-    // Initial check for tasks due within 24 hours
-    const initialReminders = checkAndSendReminders(tasks, user);
-    setReminders(initialReminders);
+    const checkReminders = async () => {
+      try {
+        // Get reminders from API
+        const remindersResponse = await reminderAPI.getAllReminders();
+        const allReminders = remindersResponse.data || [];
+        
+        // Process reminders: add task info to reminder objects
+        const processedReminders = allReminders.map(reminder => {
+          const task = tasks.find(t => t.id === reminder.taskId);
+          if (!task) return null;
+          
+          return {
+            ...reminder,
+            taskTitle: task.title,
+            projectId: task.projectId,
+            projectTitle: task.projectTitle || 'Unknown Project',
+            taskDueDate: task.dueDate
+          };
+        }).filter(Boolean); // Remove null entries
+        
+        // Update state with all reminders
+        setReminders(processedReminders);
+        
+        // Check for reminders that need to be triggered
+        const triggeredReminderIds = checkAndTriggerReminders(processedReminders);
+        
+        // Update status of triggered reminders
+        if (triggeredReminderIds.length > 0) {
+          triggeredReminderIds.forEach(id => {
+            reminderAPI.updateReminder(id, { status: 'sent' })
+              .catch(err => console.error(`Error updating reminder status: ${err}`));
+          });
+          
+          // Update local state
+          setReminders(prevReminders => 
+            prevReminders.map(reminder => 
+              triggeredReminderIds.includes(reminder.id) 
+                ? { ...reminder, status: 'sent' } 
+                : reminder
+            )
+          );
+        }
+      } catch (error) {
+        console.error('Error checking reminders:', error);
+      }
+    };
     
-    // Set up interval to check for reminders every hour
-    const intervalId = setInterval(() => {
-      const updatedReminders = checkAndSendReminders(tasks, user);
-      setReminders(updatedReminders);
-    }, 3600000); // Check every hour (3600000 ms)
+    // Initial check
+    checkReminders();
+    
+    // Set up interval to check for reminders every minute
+    const intervalId = setInterval(checkReminders, 60000);
     
     return () => clearInterval(intervalId);
-  }, [tasks, user, loading]);
+  }, [tasks, loading, hasPermission]);
 
   // Function to manually send a reminder for a specific task
-  const sendReminder = async (taskId, recipientId) => {
+  const sendReminder = async (taskId) => {
+    if (!hasPermission) {
+      const permission = await checkNotificationPermission();
+      setHasPermission(permission);
+      if (!permission) return false;
+    }
+    
     const task = tasks.find(t => t.id === taskId);
     if (!task) {
       console.error(`Task with ID ${taskId} not found`);
       return false;
     }
     
-    // In a real app, you would send the reminder to the specific recipient
-    // For now, we'll just send to the current user
-    return await checkAndSendReminders([task], user).length > 0;
+    try {
+      // Send immediate notification
+      const success = sendNotification(
+        `Reminder: ${task.title}`,
+        {
+          body: `This is a reminder for your task "${task.title}" that is due soon.`,
+          icon: '/notification-icon.png',
+          data: { taskId: task.id }
+        }
+      );
+      
+      if (success) {
+        // Create a record of this reminder
+        const reminderData = {
+          taskId: task.id,
+          title: `Reminder: ${task.title}`,
+          message: `This is a reminder for your task "${task.title}" that is due soon.`,
+          status: 'sent',
+          sendAt: new Date().toISOString()
+        };
+        
+        const response = await reminderAPI.createReminder(reminderData);
+        
+        // Add the new reminder to the list
+        if (response.data) {
+          const newReminder = {
+            ...response.data,
+            taskTitle: task.title,
+            projectId: task.projectId,
+            projectTitle: task.projectTitle || 'Unknown Project',
+            taskDueDate: task.dueDate
+          };
+          
+          setReminders(prev => [...prev, newReminder]);
+        }
+        
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('Error sending reminder:', error);
+      return false;
+    }
   };
 
   // Function to mark a reminder as read/dismissed
-  const dismissReminder = (taskId) => {
+  const dismissReminder = (reminderId) => {
+    // Update reminder status in storage
+    reminderAPI.updateReminder(reminderId, { status: 'sent' })
+      .catch(error => console.error('Error updating reminder status:', error));
+    
+    // Update local state
     setReminders(prevReminders => 
-      prevReminders.filter(reminder => reminder.id !== taskId)
+      prevReminders.map(reminder => 
+        reminder.id === reminderId 
+          ? { ...reminder, status: 'sent' } 
+          : reminder
+      )
     );
   };
 
   // Function to refresh tasks from the API
   const refreshTasks = async () => {
-    if (!user) return;
-    
     try {
       setLoading(true);
-      const response = await taskAPI.getAllTasks();
+      const tasksResponse = await taskAPI.getAllTasks();
+      const projectsResponse = await projectAPI.getAllProjects();
+      
+      const projects = projectsResponse.data || [];
       
       // Transform tasks to the format needed for notifications
-      const formattedTasks = response.data.map(task => ({
-        id: task._id,
-        title: task.title,
-        description: task.description,
-        projectId: task.project._id,
-        projectTitle: task.project.title,
-        assignees: task.assignees.map(assignee => assignee._id),
-        dueDate: task.dueDate,
-        completed: task.completed,
-        priority: task.priority
-      }));
+      const formattedTasks = tasksResponse.data.map(task => {
+        const project = projects.find(p => p.id === task.projectId) || { title: 'Unknown Project' };
+        return {
+          id: task.id,
+          title: task.title,
+          description: task.description || '',
+          projectId: task.projectId,
+          projectTitle: project.title,
+          dueDate: task.dueDate,
+          completed: task.status === 'completed',
+          priority: task.priority || 'medium'
+        };
+      });
       
       setTasks(formattedTasks);
       setError(null);

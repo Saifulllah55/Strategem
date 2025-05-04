@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { 
   Box, 
   Drawer, 
@@ -15,7 +15,8 @@ import {
   ListItemText,
   Avatar,
   Menu,
-  MenuItem
+  MenuItem,
+  Badge
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -24,10 +25,11 @@ import {
   ShareOutlined,
   DashboardOutlined,
   AccountCircle,
-  Logout
+  EmailOutlined,
+  NotificationsOutlined
 } from '@mui/icons-material';
-import { useAuth } from '../../context/AuthContext';
 import NotificationPopup from './NotificationPopup';
+import { useApp } from '../../context/AppContext';
 
 // Drawer width
 const drawerWidth = 260;
@@ -35,8 +37,10 @@ const drawerWidth = 260;
 const MainLayout = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
+  const [notificationAnchorEl, setNotificationAnchorEl] = useState(null);
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const location = useLocation();
+  const { notifications } = useApp();
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -50,23 +54,32 @@ const MainLayout = () => {
     setAnchorEl(null);
   };
 
-  const handleLogout = () => {
-    handleMenuClose();
-    logout();
-    navigate('/login');
-  };
-
   const handleProfileClick = () => {
     handleMenuClose();
     navigate('/profile');
+  };
+
+  const handleNotificationOpen = (event) => {
+    setNotificationAnchorEl(event.currentTarget);
+  };
+
+  const handleNotificationClose = () => {
+    setNotificationAnchorEl(null);
   };
 
   const navItems = [
     { text: 'Dashboard', icon: <DashboardOutlined />, path: '/dashboard' },
     { text: 'Manage Tasks', icon: <AssignmentOutlined />, path: '/tasks' },
     { text: 'Generate Report', icon: <BarChartOutlined />, path: '/reports' },
+    { text: 'Email Reminders', icon: <EmailOutlined />, path: '/reminders' },
     { text: 'Share Project', icon: <ShareOutlined />, path: '/share' },
   ];
+
+  const getCurrentPageTitle = () => {
+    const currentPath = location.pathname;
+    const currentItem = navItems.find(item => currentPath.includes(item.path));
+    return currentItem?.text || 'Dashboard';
+  };
 
   const drawer = (
     <div>
@@ -86,15 +99,21 @@ const MainLayout = () => {
               }}
               sx={{
                 py: 1.5,
+                bgcolor: location.pathname.includes(item.path) ? 'rgba(0, 0, 0, 0.08)' : 'transparent',
                 '&:hover': {
-                  backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                  backgroundColor: 'rgba(0, 0, 0, 0.04)',
                 },
               }}
             >
-              <ListItemIcon sx={{ color: 'primary.main' }}>
+              <ListItemIcon sx={{ color: location.pathname.includes(item.path) ? 'primary.main' : 'inherit' }}>
                 {item.icon}
               </ListItemIcon>
-              <ListItemText primary={item.text} />
+              <ListItemText 
+                primary={item.text} 
+                primaryTypographyProps={{
+                  fontWeight: location.pathname.includes(item.path) ? 'bold' : 'normal'
+                }}
+              />
             </ListItemButton>
           </ListItem>
         ))}
@@ -102,14 +121,20 @@ const MainLayout = () => {
     </div>
   );
 
+  // Notification state
+  const notificationOpen = Boolean(notificationAnchorEl);
+  const notificationCount = notifications?.length || 0;
+
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
       <AppBar
         position="fixed"
-        elevation={0}
+        elevation={1}
+        color="default"
         sx={{
           width: { sm: `calc(100% - ${drawerWidth}px)` },
           ml: { sm: `${drawerWidth}px` },
+          bgcolor: 'background.paper',
         }}
       >
         <Toolbar>
@@ -122,60 +147,68 @@ const MainLayout = () => {
           >
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-            {navItems.find(item => window.location.pathname.includes(item.path))?.text || 'Dashboard'}
+          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1, color: 'text.primary' }}>
+            {getCurrentPageTitle()}
           </Typography>
           
-          {user && (
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              <NotificationPopup />
-              
-              <Typography variant="body1" sx={{ mr: 2, display: { xs: 'none', sm: 'block' } }}>
-                Hello, {user.name}
-              </Typography>
-              <IconButton
-                size="large"
-                edge="end"
-                aria-label="account of current user"
-                aria-controls="menu-appbar"
-                aria-haspopup="true"
-                onClick={handleProfileMenuOpen}
-                color="inherit"
-              >
-                <Avatar sx={{ bgcolor: 'primary.main', width: 32, height: 32 }}>
-                  {user.name.charAt(0).toUpperCase()}
-                </Avatar>
-              </IconButton>
-              <Menu
-                id="menu-appbar"
-                anchorEl={anchorEl}
-                anchorOrigin={{
-                  vertical: 'bottom',
-                  horizontal: 'right',
-                }}
-                keepMounted
-                transformOrigin={{
-                  vertical: 'top',
-                  horizontal: 'right',
-                }}
-                open={Boolean(anchorEl)}
-                onClose={handleMenuClose}
-              >
-                <MenuItem onClick={handleProfileClick}>
-                  <ListItemIcon>
-                    <AccountCircle fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText>Profile</ListItemText>
-                </MenuItem>
-                <MenuItem onClick={handleLogout}>
-                  <ListItemIcon>
-                    <Logout fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText>Logout</ListItemText>
-                </MenuItem>
-              </Menu>
-            </Box>
-          )}
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            {/* Notification Icon */}
+            <IconButton 
+              color="inherit" 
+              onClick={handleNotificationOpen}
+              sx={{ mr: 1 }}
+            >
+              <Badge badgeContent={notificationCount} color="error">
+                <NotificationsOutlined />
+              </Badge>
+            </IconButton>
+            
+            {/* Use the NotificationPopup component */}
+            <NotificationPopup 
+              anchorEl={notificationAnchorEl}
+              open={notificationOpen}
+              onClose={handleNotificationClose}
+            />
+            
+            <Typography variant="body1" sx={{ mr: 2, display: { xs: 'none', sm: 'block' } }}>
+              Hello, User
+            </Typography>
+            <IconButton
+              size="large"
+              edge="end"
+              aria-label="account of current user"
+              aria-controls="menu-appbar"
+              aria-haspopup="true"
+              onClick={handleProfileMenuOpen}
+              color="inherit"
+            >
+              <Avatar sx={{ bgcolor: 'primary.main', width: 32, height: 32 }}>
+                U
+              </Avatar>
+            </IconButton>
+            <Menu
+              id="menu-appbar"
+              anchorEl={anchorEl}
+              anchorOrigin={{
+                vertical: 'bottom',
+                horizontal: 'right',
+              }}
+              keepMounted
+              transformOrigin={{
+                vertical: 'top',
+                horizontal: 'right',
+              }}
+              open={Boolean(anchorEl)}
+              onClose={handleMenuClose}
+            >
+              <MenuItem onClick={handleProfileClick}>
+                <ListItemIcon>
+                  <AccountCircle fontSize="small" />
+                </ListItemIcon>
+                <ListItemText>Profile</ListItemText>
+              </MenuItem>
+            </Menu>
+          </Box>
         </Toolbar>
       </AppBar>
       
