@@ -1,7 +1,10 @@
+
+console.log("Auth controller loaded");
 import cloudinary from "../lib/cloudinary.js";
 import { generateToken } from "../lib/utils.js";
 import User from "../models/user.model.js";
 import bcryptjs from "bcryptjs";
+
 
 export const login = async (req, res) => {
   try {
@@ -119,7 +122,7 @@ export const updateProfile = async (req, res) => {
     }
 
     res.status(200).json(updatedUser);
-  } catch (error) {
+  }catch (error) {
     console.error("Error updating profile:", error);
     res.status(500).json({ message: "Server error. Please try again later." });
   }
