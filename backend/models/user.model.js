@@ -1,5 +1,6 @@
 import mongoose, { Schema } from "mongoose";
 
+console.log("usermodel js");
 const userSchema = new Schema(
   {
     email: {
