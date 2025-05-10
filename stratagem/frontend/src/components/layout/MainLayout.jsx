@@ -30,6 +30,7 @@ import {
 } from '@mui/icons-material';
 import NotificationPopup from './NotificationPopup';
 import { useApp } from '../../context/AppContext';
+import { useNotification } from '../../context/NotificationContext';
 
 // Drawer width
 const drawerWidth = 260;
@@ -41,6 +42,7 @@ const MainLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { notifications } = useApp();
+  const { reminders } = useNotification();
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -71,7 +73,7 @@ const MainLayout = () => {
     { text: 'Dashboard', icon: <DashboardOutlined />, path: '/dashboard' },
     { text: 'Manage Tasks', icon: <AssignmentOutlined />, path: '/tasks' },
     { text: 'Generate Report', icon: <BarChartOutlined />, path: '/reports' },
-    { text: 'Email Reminders', icon: <EmailOutlined />, path: '/reminders' },
+    { text: 'Reminders', icon: <EmailOutlined />, path: '/reminders' },
     { text: 'Share Project', icon: <ShareOutlined />, path: '/share' },
   ];
 
@@ -123,18 +125,17 @@ const MainLayout = () => {
 
   // Notification state
   const notificationOpen = Boolean(notificationAnchorEl);
-  const notificationCount = notifications?.length || 0;
+  const notificationCount = (notifications?.length || 0) + (reminders?.length || 0);
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-      <AppBar
-        position="fixed"
-        elevation={1}
-        color="default"
-        sx={{
-          width: { sm: `calc(100% - ${drawerWidth}px)` },
+    <Box sx={{ display: 'flex' }}>
+      <AppBar 
+        position="fixed" 
+        sx={{ 
+          width: { sm: `calc(100% - ${drawerWidth}px)` }, 
           ml: { sm: `${drawerWidth}px` },
-          bgcolor: 'background.paper',
+          boxShadow: 'none',
+          borderBottom: '1px solid rgba(0, 0, 0, 0.12)'
         }}
       >
         <Toolbar>
@@ -147,10 +148,9 @@ const MainLayout = () => {
           >
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1, color: 'text.primary' }}>
+          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
             {getCurrentPageTitle()}
           </Typography>
-          
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
             {/* Notification Icon */}
             <IconButton 
@@ -201,21 +201,18 @@ const MainLayout = () => {
               open={Boolean(anchorEl)}
               onClose={handleMenuClose}
             >
-              <MenuItem onClick={handleProfileClick}>
-                <ListItemIcon>
-                  <AccountCircle fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>Profile</ListItemText>
-              </MenuItem>
+              <MenuItem onClick={handleProfileClick}>Profile</MenuItem>
+              <MenuItem onClick={handleMenuClose}>Settings</MenuItem>
+              <MenuItem onClick={handleMenuClose}>Logout</MenuItem>
             </Menu>
           </Box>
         </Toolbar>
       </AppBar>
-      
       <Box
         component="nav"
         sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}
       >
+        {/* Mobile drawer */}
         <Drawer
           variant="temporary"
           open={mobileOpen}
@@ -225,32 +222,23 @@ const MainLayout = () => {
           }}
           sx={{
             display: { xs: 'block', sm: 'none' },
-            '& .MuiDrawer-paper': { 
-              boxSizing: 'border-box', 
-              width: drawerWidth,
-              backgroundColor: 'background.sidebar', 
-            },
+            '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
           }}
         >
           {drawer}
         </Drawer>
+        {/* Desktop drawer */}
         <Drawer
           variant="permanent"
           sx={{
             display: { xs: 'none', sm: 'block' },
-            '& .MuiDrawer-paper': { 
-              boxSizing: 'border-box', 
-              width: drawerWidth,
-              backgroundColor: 'background.sidebar',
-              borderRight: '1px solid rgba(255, 255, 255, 0.12)'
-            },
+            '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
           }}
           open
         >
           {drawer}
         </Drawer>
       </Box>
-      
       <Box
         component="main"
         sx={{ 

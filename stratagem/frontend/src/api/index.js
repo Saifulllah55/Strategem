@@ -1,75 +1,59 @@
-import { 
-  getData, 
-  getItemById, 
-  addItem, 
-  updateItem, 
-  deleteItem, 
-  getItemsByField,
-  initializeLocalStorage
-} from '../utils/localStorageUtils';
+import axios from 'axios';
 
-// Initialize local storage with sample data
-initializeLocalStorage();
+const API_URL = 'http://localhost:5000/api';
 
-// Helper function to simulate API response delay
-const simulateDelay = async (data, delay = 300) => {
-  return new Promise(resolve => {
-    setTimeout(() => {
-      resolve({ success: true, data });
-    }, delay);
-  });
-};
+// Create axios instance with default config
+const api = axios.create({
+  baseURL: API_URL,
+  headers: {
+    'Content-Type': 'application/json'
+  }
+});
+
+// Add request interceptor to include auth token
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
 
 // Project API
 export const projectAPI = {
   // Get all projects
   getAllProjects: async () => {
-    const projects = getData('projects');
-    return simulateDelay(projects);
+    const response = await api.get('/projects');
+    return response;
   },
   
   // Get project by ID
   getProjectById: async (id) => {
-    const project = getItemById('projects', id);
-    return simulateDelay(project);
+    const response = await api.get(`/projects/${id}`);
+    return response;
   },
   
   // Create new project
   createProject: async (projectData) => {
-    const now = new Date().toISOString();
-    const newProject = addItem('projects', {
-      ...projectData,
-      createdAt: now,
-      updatedAt: now
-    });
-    return simulateDelay(newProject);
+    const response = await api.post('/projects', projectData);
+    return response;
   },
   
   // Update project
   updateProject: async (id, updates) => {
-    const updatedProject = updateItem('projects', id, {
-      ...updates,
-      updatedAt: new Date().toISOString()
-    });
-    return simulateDelay(updatedProject);
+    const response = await api.put(`/projects/${id}`, updates);
+    return response;
   },
   
   // Delete project
   deleteProject: async (id) => {
-    const result = deleteItem('projects', id);
-    
-    // If project is deleted, also delete associated tasks
-    if (result) {
-      const tasks = getData('tasks');
-      const projectTasks = tasks.filter(task => task.projectId === id);
-      
-      // Delete each task
-      projectTasks.forEach(task => {
-        deleteItem('tasks', task.id);
-      });
-    }
-    
-    return simulateDelay({ deleted: result });
+    const response = await api.delete(`/projects/${id}`);
+    return response;
   }
 };
 
@@ -77,62 +61,59 @@ export const projectAPI = {
 export const taskAPI = {
   // Get all tasks
   getAllTasks: async () => {
-    const tasks = getData('tasks');
-    return simulateDelay(tasks);
-  },
-  
-  // Get tasks for a specific project
-  getProjectTasks: async (projectId) => {
-    const tasks = getItemsByField('tasks', 'projectId', projectId);
-    return simulateDelay(tasks);
+    const response = await api.get('/tasks');
+    return response;
   },
   
   // Get task by ID
   getTaskById: async (id) => {
-    const task = getItemById('tasks', id);
-    return simulateDelay(task);
+    const response = await api.get(`/tasks/${id}`);
+    return response;
   },
   
   // Create new task
   createTask: async (taskData) => {
-    const now = new Date().toISOString();
-    const newTask = addItem('tasks', {
-      ...taskData,
-      createdAt: now,
-      updatedAt: now,
-      status: taskData.status || 'pending'
-    });
-    return simulateDelay(newTask);
+    const response = await api.post('/tasks', taskData);
+    return response;
   },
   
   // Update task
   updateTask: async (id, updates) => {
-    const task = getItemById('tasks', id);
-    const now = new Date().toISOString();
-    const updatedTask = updateItem('tasks', id, {
-      ...updates,
-      updatedAt: now,
-      completedAt: updates.status === 'completed' && task.status !== 'completed' ? now : task.completedAt
-    });
-    return simulateDelay(updatedTask);
+    const response = await api.put(`/tasks/${id}`, updates);
+    return response;
   },
   
   // Delete task
   deleteTask: async (id) => {
-    const result = deleteItem('tasks', id);
-    
-    // If task is deleted, also delete associated reminders
-    if (result) {
-      const reminders = getData('reminders');
-      const taskReminders = reminders.filter(reminder => reminder.taskId === id);
-      
-      // Delete each reminder
-      taskReminders.forEach(reminder => {
-        deleteItem('reminders', reminder.id);
-      });
-    }
-    
-    return simulateDelay({ deleted: result });
+    const response = await api.delete(`/tasks/${id}`);
+    return response;
+  },
+  
+  // Get tasks by project
+  getTasksByProject: async (projectId) => {
+    const response = await api.get(`/tasks/project/${projectId}`);
+    return response;
+  }
+};
+
+// Report API
+export const reportAPI = {
+  // Get dashboard data with summary stats
+  getDashboardData: async () => {
+    const response = await api.get('/dashboard');
+    return response;
+  },
+  
+  // Get detailed project report
+  getProjectReport: async (projectId) => {
+    const response = await api.get(`/dashboard/project/${projectId}`);
+    return response;
+  },
+  
+  // Get tasks report with timeline data
+  getTasksReport: async () => {
+    const response = await api.get('/dashboard/tasks');
+    return response;
   }
 };
 
@@ -140,302 +121,163 @@ export const taskAPI = {
 export const reminderAPI = {
   // Get all reminders
   getAllReminders: async () => {
-    const reminders = getData('reminders');
-    return simulateDelay(reminders);
+    try {
+      // Check if token exists before making the request
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.warn('No authentication token found for reminders API');
+        return { data: [] };
+      }
+
+      const response = await api.get('/reminders');
+      return response;
+    } catch (error) {
+      if (error.response && error.response.status === 401) {
+        console.error("Authentication failed when fetching reminders. Please log in again.");
+        // Optionally redirect to login or refresh token
+      } else {
+        console.error("Error fetching reminders:", error);
+      }
+      // Return empty data to avoid crashing
+      return { data: [] };
+    }
   },
   
-  // Get reminders for a specific task
-  getTaskReminders: async (taskId) => {
-    const reminders = getItemsByField('reminders', 'taskId', taskId);
-    return simulateDelay(reminders);
+  // Get all custom reminders
+  getCustomReminders: async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.warn('No authentication token found for reminders API');
+        return { data: [] };
+      }
+
+      const response = await api.get('/reminders/custom');
+      return response;
+    } catch (error) {
+      console.error("Error fetching custom reminders:", error);
+      return { data: [] };
+    }
   },
   
   // Get reminder by ID
   getReminderById: async (id) => {
-    const reminder = getItemById('reminders', id);
-    return simulateDelay(reminder);
+    try {
+      const response = await api.get(`/reminders/${id}`);
+      return response;
+    } catch (error) {
+      console.error(`Error fetching reminder ${id}:`, error);
+      throw error;
+    }
   },
   
   // Create new reminder
   createReminder: async (reminderData) => {
-    const now = new Date().toISOString();
-    
-    // Calculate actual send time if using timeBeforeDeadline
-    let sendAt = null;
-    if (reminderData.timeBeforeDeadline) {
-      const task = getItemById('tasks', reminderData.taskId);
-      if (task && task.dueDate) {
-        const dueDate = new Date(task.dueDate);
-        sendAt = new Date(dueDate);
-        sendAt.setHours(sendAt.getHours() - reminderData.timeBeforeDeadline);
-        sendAt = sendAt.toISOString();
-      }
+    try {
+      // Make sure reminderData has necessary fields
+      const payload = {
+        ...reminderData,
+        // If sending taskId but not relatedTo/type for backward compatibility
+        relatedTo: reminderData.type !== 'custom' ? (reminderData.relatedTo || reminderData.taskId) : undefined,
+        type: reminderData.type || "task",
+        // Make sure there's a title
+        title: reminderData.title || `Reminder`,
+        // Set a due date if not provided
+        dueDate: reminderData.dueDate || new Date(Date.now() + 24 * 60 * 60 * 1000),
+        // Hours before due date to send notification
+        hoursBeforeDue: reminderData.hoursBeforeDue || 24
+      };
+      
+      const response = await api.post('/reminders', payload);
+      return response;
+    } catch (error) {
+      console.error("Error creating reminder:", error);
+      throw error;
     }
-    
-    const newReminder = addItem('reminders', {
-      ...reminderData,
-      sendAt: sendAt || reminderData.sendAt,
-      createdAt: now,
-      status: reminderData.status || 'pending'
-    });
-    
-    return simulateDelay(newReminder);
+  },
+  
+  // Create a custom reminder (not tied to a task/project)
+  createCustomReminder: async (reminderData) => {
+    try {
+      const payload = {
+        title: reminderData.title || "Custom Reminder",
+        description: reminderData.description || "",
+        dueDate: reminderData.dueDate || new Date(Date.now() + 24 * 60 * 60 * 1000),
+        hoursBeforeDue: reminderData.hoursBeforeDue || 24,
+        priority: reminderData.priority || "medium"
+      };
+      
+      const response = await api.post('/reminders/custom', payload);
+      return response;
+    } catch (error) {
+      console.error("Error creating custom reminder:", error);
+      throw error;
+    }
   },
   
   // Update reminder
   updateReminder: async (id, updates) => {
-    // Re-calculate send time if needed
-    let updatedData = { ...updates };
-    
-    if (updates.timeBeforeDeadline) {
-      const reminder = getItemById('reminders', id);
-      const task = getItemById('tasks', reminder.taskId);
-      
-      if (task && task.dueDate) {
-        const dueDate = new Date(task.dueDate);
-        const sendAt = new Date(dueDate);
-        sendAt.setHours(sendAt.getHours() - updates.timeBeforeDeadline);
-        updatedData.sendAt = sendAt.toISOString();
-      }
+    try {
+      const response = await api.put(`/reminders/${id}`, updates);
+      return response;
+    } catch (error) {
+      console.error(`Error updating reminder ${id}:`, error);
+      throw error;
     }
-    
-    const updatedReminder = updateItem('reminders', id, updatedData);
-    return simulateDelay(updatedReminder);
   },
   
   // Delete reminder
   deleteReminder: async (id) => {
-    const result = deleteItem('reminders', id);
-    return simulateDelay({ deleted: result });
-  }
-};
-
-// Report API (for the Reports and Graphs module)
-export const reportAPI = {
-  // Get dashboard data with summary stats
-  getDashboardData: async () => {
-    const projects = getData('projects');
-    const tasks = getData('tasks');
-    
-    // Calculate project stats
-    const projectStats = projects.map(project => {
-      const projectTasks = tasks.filter(task => task.projectId === project.id);
-      const completedTasks = projectTasks.filter(task => task.status === 'completed').length;
-      const totalTasks = projectTasks.length;
-      const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-      
-      return {
-        id: project.id,
-        title: project.title,
-        description: project.description,
-        progress,
-        createdAt: project.createdAt,
-        dueDate: project.dueDate,
-        tasksCount: totalTasks,
-        completedTasksCount: completedTasks
-      };
-    });
-    
-    // Calculate overall task stats
-    const totalTasks = tasks.length;
-    const completedTasks = tasks.filter(task => task.status === 'completed').length;
-    const pendingTasks = tasks.filter(task => task.status === 'pending').length;
-    const inProgressTasks = tasks.filter(task => task.status === 'in-progress').length;
-    
-    // Recent activity (last 5 updated tasks)
-    const recentActivity = [...tasks]
-      .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
-      .slice(0, 5)
-      .map(task => {
-        const project = projects.find(p => p.id === task.projectId);
-        return {
-          id: task.id,
-          title: task.title,
-          projectId: task.projectId,
-          projectTitle: project ? project.title : 'Unknown Project',
-          status: task.status,
-          updatedAt: task.updatedAt
-        };
-      });
-    
-    // Calculate upcoming deadlines (next 5 tasks due)
-    const now = new Date();
-    const upcomingDeadlines = [...tasks]
-      .filter(task => task.status !== 'completed' && new Date(task.dueDate) >= now)
-      .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))
-      .slice(0, 5)
-      .map(task => {
-        const project = projects.find(p => p.id === task.projectId);
-        return {
-          id: task.id,
-          title: task.title,
-          projectId: task.projectId,
-          projectTitle: project ? project.title : 'Unknown Project',
-          dueDate: task.dueDate,
-          priority: task.priority
-        };
-      });
-    
-    return simulateDelay({
-      stats: {
-        totalProjects: projects.length,
-        totalTasks,
-        completedTasks,
-        pendingTasks,
-        inProgressTasks,
-        overallProgress: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
-      },
-      recentProjects: projectStats,
-      recentActivity,
-      upcomingDeadlines
-    });
+    try {
+      const response = await api.delete(`/reminders/${id}`);
+      return response;
+    } catch (error) {
+      console.error(`Error deleting reminder ${id}:`, error);
+      throw error;
+    }
   },
   
-  // Get detailed project report
-  getProjectReport: async (projectId) => {
-    const project = getItemById('projects', projectId);
-    const tasks = getItemsByField('tasks', 'projectId', projectId);
-    
-    if (!project) {
-      return simulateDelay(null);
+  // Get reminders by type
+  getRemindersByType: async (type) => {
+    try {
+      const response = await api.get(`/reminders/type/${type}`);
+      return response;
+    } catch (error) {
+      console.error(`Error fetching reminders of type ${type}:`, error);
+      throw error;
     }
-    
-    // Calculate task stats
-    const totalTasks = tasks.length;
-    const completedTasks = tasks.filter(task => task.status === 'completed').length;
-    const pendingTasks = tasks.filter(task => task.status === 'pending').length;
-    const inProgressTasks = tasks.filter(task => task.status === 'in-progress').length;
-    
-    // Calculate project progress
-    const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-    
-    // Get task history (for charts)
-    const taskTimeline = generateTaskTimeline(project, tasks);
-    
-    return simulateDelay({
-      project: {
-        id: project.id,
-        title: project.title,
-        description: project.description,
-        createdAt: project.createdAt,
-        dueDate: project.dueDate,
-        progress
-      },
-      stats: {
-        totalTasks,
-        completedTasks,
-        pendingTasks,
-        inProgressTasks
-      },
-      tasks: tasks.map(task => ({
-        id: task.id,
-        title: task.title,
-        status: task.status,
-        priority: task.priority,
-        createdAt: task.createdAt,
-        updatedAt: task.updatedAt,
-        completedAt: task.completedAt,
-        dueDate: task.dueDate
-      })),
-      taskTimeline
-    });
   },
   
-  // Get tasks report with timeline data
-  getTasksReport: async () => {
-    const tasks = getData('tasks');
-    const projects = getData('projects');
-    
-    // Calculate tasks by status
-    const tasksByStatus = {
-      completed: tasks.filter(task => task.status === 'completed').length,
-      pending: tasks.filter(task => task.status === 'pending').length,
-      inProgress: tasks.filter(task => task.status === 'in-progress').length
-    };
-    
-    // Calculate tasks by priority
-    const tasksByPriority = {
-      high: tasks.filter(task => task.priority === 'high').length,
-      medium: tasks.filter(task => task.priority === 'medium').length,
-      low: tasks.filter(task => task.priority === 'low').length
-    };
-    
-    // Generate timeline data for all projects
-    const timelineData = [];
-    
-    // Start from 30 days ago
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - 30);
-    
-    // Generate dates (daily intervals)
-    const dates = [];
-    const currentDate = new Date(startDate);
-    while (currentDate <= new Date()) {
-      dates.push(new Date(currentDate));
-      currentDate.setDate(currentDate.getDate() + 1);
+  // Get reminders that need notification
+  getRemindersToNotify: async () => {
+    try {
+      const response = await api.get('/reminders/notify');
+      return response;
+    } catch (error) {
+      console.error("Error fetching reminders to notify:", error);
+      return { data: [] };
     }
-    
-    // For each date, count tasks completed on that day
-    dates.forEach(date => {
-      const dateString = date.toISOString().split('T')[0];
-      const completedCount = tasks.filter(task => 
-        task.completedAt && 
-        task.completedAt.split('T')[0] === dateString
-      ).length;
-      
-      timelineData.push({
-        date: dateString,
-        completed: completedCount
-      });
-    });
-    
-    return simulateDelay({
-      tasksByStatus,
-      tasksByPriority,
-      timelineData
-    });
+  },
+  
+  // Mark reminder as notified
+  markAsNotified: async (id) => {
+    try {
+      const response = await api.patch(`/reminders/${id}/notified`);
+      return response;
+    } catch (error) {
+      console.error(`Error marking reminder ${id} as notified:`, error);
+      throw error;
+    }
+  },
+  
+  // Cleanup expired reminders
+  cleanupExpiredReminders: async () => {
+    try {
+      const response = await api.delete('/reminders/cleanup');
+      return response;
+    } catch (error) {
+      console.error("Error cleaning up expired reminders:", error);
+      return { data: { count: 0 } };
+    }
   }
-};
-
-// Helper function to generate task timeline for a project
-const generateTaskTimeline = (project, tasks) => {
-  if (!project || !tasks || tasks.length === 0) return [];
-  
-  // Start from project creation date
-  const startDate = new Date(project.createdAt);
-  const today = new Date();
-  
-  // Generate dates (weekly intervals)
-  const dates = [];
-  const currentDate = new Date(startDate);
-  while (currentDate <= today) {
-    dates.push(new Date(currentDate));
-    currentDate.setDate(currentDate.getDate() + 7);
-  }
-  
-  // For each date, calculate completed and pending tasks
-  return dates.map(date => {
-    const dateString = date.toISOString().split('T')[0];
-    
-    // Count tasks completed by this date
-    const completedCount = tasks.filter(task => 
-      task.status === 'completed' && 
-      task.completedAt && 
-      new Date(task.completedAt) <= date
-    ).length;
-    
-    // Total tasks created by this date
-    const totalTasksByDate = tasks.filter(task => 
-      new Date(task.createdAt) <= date
-    ).length;
-    
-    // Pending = Total - Completed
-    const pendingCount = totalTasksByDate - completedCount;
-    
-    return {
-      date: dateString,
-      completed: completedCount,
-      pending: pendingCount
-    };
-  });
 };

@@ -16,6 +16,7 @@ export const useNotification = () => useContext(NotificationContext);
 export const NotificationProvider = ({ children }) => {
   const [hasPermission, setHasPermission] = useState(false);
   const [reminders, setReminders] = useState([]);
+  const [customReminders, setCustomReminders] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -37,6 +38,8 @@ export const NotificationProvider = ({ children }) => {
         setLoading(true);
         const tasksResponse = await taskAPI.getAllTasks();
         const projectsResponse = await projectAPI.getAllProjects();
+        const remindersResponse = await reminderAPI.getAllReminders();
+        const customRemindersResponse = await reminderAPI.getCustomReminders();
         
         const projects = projectsResponse.data || [];
         
@@ -55,11 +58,32 @@ export const NotificationProvider = ({ children }) => {
           };
         });
         
+        // Process reminders for tasks
+        const taskReminders = [];
+        
+        (remindersResponse.data || []).forEach(reminder => {
+          if (reminder.type === 'task' && reminder.relatedTo) {
+            // Task reminder
+            const task = formattedTasks.find(t => t.id === reminder.relatedTo) || null;
+            if (task) {
+              taskReminders.push({
+                ...reminder,
+                taskTitle: task.title,
+                projectId: task.projectId,
+                projectTitle: task.projectTitle || 'Unknown Project',
+                taskDueDate: task.dueDate
+              });
+            }
+          }
+        });
+        
         setTasks(formattedTasks);
+        setReminders(taskReminders);
+        setCustomReminders(customRemindersResponse.data || []);
         setError(null);
       } catch (err) {
-        console.error('Error fetching tasks:', err);
-        setError('Failed to load tasks. Please try again later.');
+        console.error('Error fetching tasks and reminders:', err);
+        setError('Failed to load tasks and reminders. Please try again later.');
       } finally {
         setLoading(false);
       }
@@ -71,67 +95,74 @@ export const NotificationProvider = ({ children }) => {
     const intervalId = setInterval(fetchData, 5 * 60 * 1000);
     return () => clearInterval(intervalId);
   }, []);
-
-  // Check for reminders and trigger notifications
+  
+  // Check for reminders that need to be sent
   useEffect(() => {
-    if (!hasPermission || tasks.length === 0 || loading) return;
-    
     const checkReminders = async () => {
+      if (!hasPermission) return;
+      
       try {
-        // Get reminders from API
-        const remindersResponse = await reminderAPI.getAllReminders();
-        const allReminders = remindersResponse.data || [];
+        // Check for reminders due to be notified
+        const dueSoonResponse = await reminderAPI.getRemindersToNotify();
+        const dueSoonReminders = dueSoonResponse.data || [];
         
-        // Process reminders: add task info to reminder objects
-        const processedReminders = allReminders.map(reminder => {
-          const task = tasks.find(t => t.id === reminder.taskId);
-          if (!task) return null;
+        // Send notifications for each reminder
+        for (const reminder of dueSoonReminders) {
+          let title = reminder.title;
+          let body = reminder.description;
           
-          return {
-            ...reminder,
-            taskTitle: task.title,
-            projectId: task.projectId,
-            projectTitle: task.projectTitle || 'Unknown Project',
-            taskDueDate: task.dueDate
-          };
-        }).filter(Boolean); // Remove null entries
-        
-        // Update state with all reminders
-        setReminders(processedReminders);
-        
-        // Check for reminders that need to be triggered
-        const triggeredReminderIds = checkAndTriggerReminders(processedReminders);
-        
-        // Update status of triggered reminders
-        if (triggeredReminderIds.length > 0) {
-          triggeredReminderIds.forEach(id => {
-            reminderAPI.updateReminder(id, { status: 'sent' })
-              .catch(err => console.error(`Error updating reminder status: ${err}`));
+          if (reminder.type === 'task' && reminder.relatedTo) {
+            const task = tasks.find(t => t.id === reminder.relatedTo);
+            if (task) {
+              title = `Task Reminder: ${task.title}`;
+              body = `Your task "${task.title}" needs attention.`;
+            }
+          }
+          
+          // Send the notification
+          const success = sendNotification(title, {
+            body,
+            icon: '/notification-icon.png',
+            data: { reminderId: reminder._id, type: reminder.type }
           });
           
-          // Update local state
-          setReminders(prevReminders => 
-            prevReminders.map(reminder => 
-              triggeredReminderIds.includes(reminder.id) 
-                ? { ...reminder, status: 'sent' } 
-                : reminder
-            )
-          );
+          if (success) {
+            // Mark as notified
+            await reminderAPI.markAsNotified(reminder._id);
+            
+            // Update local state
+            if (reminder.type === 'custom') {
+              setCustomReminders(prev => 
+                prev.map(r => r._id === reminder._id ? { ...r, isNotified: true } : r)
+              );
+            } else {
+              setReminders(prev => 
+                prev.map(r => r._id === reminder._id ? { ...r, isNotified: true } : r)
+              );
+            }
+          }
+        }
+        
+        // Cleanup expired reminders (runs once a day)
+        const now = new Date();
+        const lastCleanup = localStorage.getItem('lastReminderCleanup');
+        
+        if (!lastCleanup || (now - new Date(lastCleanup)) > (24 * 60 * 60 * 1000)) {
+          await reminderAPI.cleanupExpiredReminders();
+          localStorage.setItem('lastReminderCleanup', now.toISOString());
         }
       } catch (error) {
         console.error('Error checking reminders:', error);
       }
     };
     
-    // Initial check
+    // Check immediately and then every minute
     checkReminders();
+    const checkInterval = setInterval(checkReminders, 60 * 1000);
     
-    // Set up interval to check for reminders every minute
-    const intervalId = setInterval(checkReminders, 60000);
-    
-    return () => clearInterval(intervalId);
-  }, [tasks, loading, hasPermission]);
-
+    return () => clearInterval(checkInterval);
+  }, [hasPermission, tasks]);
+  
   // Function to manually send a reminder for a specific task
   const sendReminder = async (taskId) => {
     if (!hasPermission) {
@@ -160,29 +191,36 @@ export const NotificationProvider = ({ children }) => {
       if (success) {
         // Create a record of this reminder
         const reminderData = {
-          taskId: task.id,
+          relatedTo: task.id,
+          type: "task",
           title: `Reminder: ${task.title}`,
-          message: `This is a reminder for your task "${task.title}" that is due soon.`,
-          status: 'sent',
-          sendAt: new Date().toISOString()
+          description: `This is a reminder for your task "${task.title}" that is due soon.`,
+          status: 'active',
+          priority: task.priority || "medium",
+          dueDate: new Date().toISOString()
         };
         
-        const response = await reminderAPI.createReminder(reminderData);
-        
-        // Add the new reminder to the list
-        if (response.data) {
-          const newReminder = {
-            ...response.data,
-            taskTitle: task.title,
-            projectId: task.projectId,
-            projectTitle: task.projectTitle || 'Unknown Project',
-            taskDueDate: task.dueDate
-          };
+        try {
+          const response = await reminderAPI.createReminder(reminderData);
           
-          setReminders(prev => [...prev, newReminder]);
+          // Add the new reminder to the list
+          if (response && response.data) {
+            const newReminder = {
+              ...response.data,
+              taskTitle: task.title,
+              projectId: task.projectId,
+              projectTitle: task.projectTitle || 'Unknown Project',
+              taskDueDate: task.dueDate
+            };
+            
+            setReminders(prev => [...prev, newReminder]);
+          }
+          
+          return true;
+        } catch (apiError) {
+          console.error('Error creating reminder in API:', apiError);
+          return false;
         }
-        
-        return true;
       }
       
       return false;
@@ -191,24 +229,97 @@ export const NotificationProvider = ({ children }) => {
       return false;
     }
   };
-
-  // Function to mark a reminder as read/dismissed
-  const dismissReminder = (reminderId) => {
-    // Update reminder status in storage
-    reminderAPI.updateReminder(reminderId, { status: 'sent' })
-      .catch(error => console.error('Error updating reminder status:', error));
-    
-    // Update local state
-    setReminders(prevReminders => 
-      prevReminders.map(reminder => 
-        reminder.id === reminderId 
-          ? { ...reminder, status: 'sent' } 
-          : reminder
-      )
-    );
+  
+  // Create a custom reminder
+  const createCustomReminder = async (reminderData) => {
+    try {
+      const response = await reminderAPI.createCustomReminder(reminderData);
+      
+      if (response && response.data) {
+        setCustomReminders(prev => [...prev, response.data]);
+        return response.data;
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error creating custom reminder:', error);
+      throw error;
+    }
   };
-
-  // Function to refresh tasks from the API
+  
+  // Update a custom reminder
+  const updateCustomReminder = async (reminderId, updates) => {
+    try {
+      const response = await reminderAPI.updateReminder(reminderId, {
+        ...updates,
+        type: 'custom'
+      });
+      
+      if (response && response.data) {
+        setCustomReminders(prev => 
+          prev.map(reminder => reminder._id === reminderId ? response.data : reminder)
+        );
+        return response.data;
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error updating custom reminder:', error);
+      throw error;
+    }
+  };
+  
+  // Delete reminder
+  const deleteReminder = async (reminderId, type = 'task') => {
+    try {
+      await reminderAPI.deleteReminder(reminderId);
+      
+      // Update state based on reminder type
+      if (type === 'custom') {
+        setCustomReminders(prev => prev.filter(reminder => reminder._id !== reminderId));
+      } else {
+        setReminders(prev => prev.filter(reminder => reminder._id !== reminderId));
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error deleting reminder:', error);
+      return false;
+    }
+  };
+  
+  // Dismiss reminder
+  const dismissReminder = async (reminderId, isCustomReminder = false) => {
+    try {
+      await reminderAPI.markAsNotified(reminderId);
+      
+      // Update state based on reminder type
+      if (isCustomReminder) {
+        setCustomReminders(prev => 
+          prev.map(reminder => 
+            reminder._id === reminderId 
+              ? { ...reminder, isNotified: true } 
+              : reminder
+          )
+        );
+      } else {
+        setReminders(prev => 
+          prev.map(reminder => 
+            reminder._id === reminderId 
+              ? { ...reminder, isNotified: true } 
+              : reminder
+          )
+        );
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error dismissing reminder:', error);
+      return false;
+    }
+  };
+  
+  // Refresh tasks data
   const refreshTasks = async () => {
     try {
       setLoading(true);
@@ -217,15 +328,15 @@ export const NotificationProvider = ({ children }) => {
       
       const projects = projectsResponse.data || [];
       
-      // Transform tasks to the format needed for notifications
+      // Transform tasks
       const formattedTasks = tasksResponse.data.map(task => {
-        const project = projects.find(p => p.id === task.projectId) || { title: 'Unknown Project' };
+        const project = projects.find(p => p._id === task.project._id) || { name: 'Unknown Project' };
         return {
-          id: task.id,
+          id: task._id,
           title: task.title,
           description: task.description || '',
-          projectId: task.projectId,
-          projectTitle: project.title,
+          projectId: task.project._id,
+          projectTitle: project.name,
           dueDate: task.dueDate,
           completed: task.status === 'completed',
           priority: task.priority || 'medium'
@@ -233,23 +344,34 @@ export const NotificationProvider = ({ children }) => {
       });
       
       setTasks(formattedTasks);
-      setError(null);
-    } catch (err) {
-      console.error('Error refreshing tasks:', err);
-      setError('Failed to refresh tasks. Please try again later.');
-    } finally {
       setLoading(false);
+      return formattedTasks;
+    } catch (error) {
+      console.error('Error refreshing tasks:', error);
+      setLoading(false);
+      return [];
     }
+  };
+  
+  // Get all active reminders (task + custom)
+  const getAllActiveReminders = () => {
+    return [...reminders, ...customReminders]
+      .filter(r => r.status === 'active' && new Date(r.dueDate) >= new Date());
   };
 
   const value = {
     hasPermission,
-    reminders,
+    reminders: getAllActiveReminders(),
+    taskReminders: reminders,
+    customReminders,
     tasks,
     loading,
     error,
     sendReminder,
+    createCustomReminder,
+    updateCustomReminder,
     dismissReminder,
+    deleteReminder,
     refreshTasks,
     requestPermission: checkNotificationPermission
   };

@@ -9,6 +9,7 @@ import usersRoutes from "../routes/users.route.js";
 import taskRoutes from "../routes/task.route.js";
 import activityRoutes from "../routes/activity.route.js";
 import announcementRoutes from "../routes/announcement.route.js";
+import reminderRoutes from "../routes/reminder.route.js";
 
 import { connectDB } from "../lib/database.js";
 
@@ -16,7 +17,7 @@ const app = express();
 
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: ["http://localhost:3000", "http://localhost:5173"],
     credentials: true,
   })
 );
@@ -32,6 +33,7 @@ app.use("/api/users", usersRoutes);
 app.use("/api/tasks", taskRoutes);
 app.use("/api/activities", activityRoutes);
 app.use("/api/announcements", announcementRoutes);
+app.use("/api/reminders", reminderRoutes);
 
 app.listen(5000, () => {
   console.log("Server is running on port 5000");

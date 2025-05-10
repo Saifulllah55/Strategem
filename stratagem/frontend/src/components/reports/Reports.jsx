@@ -41,7 +41,7 @@ import { Line, Bar, Pie, Doughnut } from 'react-chartjs-2';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 import html2canvas from 'html2canvas';
-import { reportAPI } from '../../api';
+import { reportAPI, projectAPI, taskAPI } from '../../api';
 
 // Register ChartJS components
 ChartJS.register(
@@ -57,135 +57,103 @@ ChartJS.register(
   Filler
 );
 
+const chartColors = {
+  blue: { bg: 'rgba(54, 162, 235, 0.6)', border: 'rgba(54, 162, 235, 1)' },
+  green: { bg: 'rgba(75, 192, 192, 0.6)', border: 'rgba(75, 192, 192, 1)' },
+  orange: { bg: 'rgba(255, 159, 64, 0.6)', border: 'rgba(255, 159, 64, 1)' },
+  purple: { bg: 'rgba(153, 102, 255, 0.6)', border: 'rgba(153, 102, 255, 1)' },
+  red: { bg: 'rgba(255, 99, 132, 0.6)', border: 'rgba(255, 99, 132, 1)' },
+  teal: { bg: 'rgba(0, 128, 128, 0.6)', border: 'rgba(0, 128, 128, 1)' }
+};
+
+function calculateTaskProgress(status) {
+  switch(status) {
+    case "submitted": return 25;
+    case "revision": return 50;
+    case "approved": return 75;
+    case "completed": return 100;
+    default: return 0; // for "created" and "assigned"
+  }
+}
+
+function calculateProjectProgress(tasks) {
+  if (!tasks || tasks.length === 0) return 0;
+  const total = tasks.reduce((sum, task) => sum + calculateTaskProgress(task.status), 0);
+  return Math.round(total / tasks.length);
+}
+
 const Reports = () => {
   const [loading, setLoading] = useState(true);
   const [tabValue, setTabValue] = useState(0);
   const [projectData, setProjectData] = useState([]);
   const [taskStats, setTaskStats] = useState({
     completed: [],
-    pending: [],
-    overdue: [],
+    inProgress: [],
+    notStarted: [],
     dates: []
   });
-  const chartsRef = useRef(null);
+  const [dueSoonProjects, setDueSoonProjects] = useState([]);
+  const chartsContainerRef = useRef(null);
   const projectDetailsRef = useRef(null);
 
-  // Fetch project data
+  // Fetch project and task data
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
+    async function fetchData() {
       try {
-        // Fetch real data from API which now uses local storage
-        const dashboardResponse = await reportAPI.getDashboardData();
-        const reportResponse = await reportAPI.getTasksReport();
+        setLoading(true);
         
-        // Process the data for the reports
-        if (dashboardResponse.data) {
-          // Extract project data from dashboard response
-          const projects = dashboardResponse.data.recentProjects || [];
+        // Get projects with populated tasks
+        const projectsResponse = await projectAPI.getAllProjects();
+        
+        if (projectsResponse.data) {
+          // Keep all projects
+          setProjectData(projectsResponse.data);
           
-          // Enhance project data with task history (for charts)
-          const enhancedProjects = await Promise.all(projects.map(async (project) => {
-            try {
-              // Get detailed project report for this project
-              const projectReportResponse = await reportAPI.getProjectReport(project.id);
-              
-              if (projectReportResponse.data) {
-                return {
-                  ...project,
-                  progress: calculateProgress(projectReportResponse.data.stats),
-                  tasks: {
-                    total: projectReportResponse.data.stats.totalTasks,
-                    completed: projectReportResponse.data.stats.completedTasks,
-                    pending: projectReportResponse.data.stats.pendingTasks,
-                    overdue: 0 // Can be added if we track overdue tasks
-                  },
-                  taskHistory: generateTaskHistory(project, projectReportResponse.data.tasks)
-                };
-              }
-              return project;
-            } catch (error) {
-              console.error(`Error fetching details for project ${project.id}:`, error);
-              return project;
-            }
-          }));
-          
-          setProjectData(enhancedProjects);
-          
-          // Process task stats for timeline chart
-          processTaskStats(enhancedProjects);
+          // Process task data for timeline chart
+          processTasksForTimeline(projectsResponse.data);
         }
       } catch (error) {
-        console.error('Error fetching project data:', error);
-        // Fallback to empty data
-        setProjectData([]);
+        console.error("Error fetching data:", error);
       } finally {
         setLoading(false);
       }
-    };
+    }
     
     fetchData();
   }, []);
-
-  // Calculate progress percentage based on task completion
-  const calculateProgress = (stats) => {
-    if (stats.totalTasks === 0) return 0;
-    return Math.round((stats.completedTasks / stats.totalTasks) * 100);
-  };
-
-  // Generate task history for chart visualization
-  const generateTaskHistory = (project, tasks) => {
-    if (!tasks || tasks.length === 0) return [];
-    
-    // Sort tasks by created date
-    const sortedTasks = [...tasks].sort((a, b) => 
-      new Date(a.createdAt) - new Date(b.createdAt)
-    );
-    
-    // Create weekly snapshots (simplified approach)
-    const startDate = new Date(project.createdAt);
-    const today = new Date();
-    const taskHistory = [];
-    
-    // Start with the project creation date
-    let currentDate = new Date(startDate);
-    
-    // Create weekly snapshots until today
-    while (currentDate <= today) {
-      const completedCount = tasks.filter(task => 
-        task.status === 'completed' && 
-        new Date(task.completedAt || task.updatedAt) <= currentDate
-      ).length;
-      
-      const pendingCount = tasks.length - completedCount;
-      
-      taskHistory.push({
-        date: currentDate.toISOString().split('T')[0], // YYYY-MM-DD
-        completed: completedCount,
-        pending: pendingCount,
-        overdue: 0 // Can be added if we track overdue tasks
-      });
-      
-      // Move to next week
-      currentDate.setDate(currentDate.getDate() + 7);
-    }
-    
-    return taskHistory;
-  };
-
-  // Process task stats for the timeline chart
-  const processTaskStats = (projects) => {
-    const dates = [];
-    const completed = [];
-    const pending = [];
-    const overdue = [];
-    
-    // Get all unique dates across all projects
+  
+  // Process tasks for timeline visualization
+  const processTasksForTimeline = (projects) => {
+    // Get all task dates (creation dates)
     const allDates = new Set();
+    const dateTaskCounts = {};
+    
+    // Initialize with dates from all tasks
     projects.forEach(project => {
-      if (project.taskHistory) {
-        project.taskHistory.forEach(history => {
-          allDates.add(history.date);
+      if (project.tasks && project.tasks.length > 0) {
+        project.tasks.forEach(task => {
+          if (task.createdAt) {
+            const dateStr = new Date(task.createdAt).toISOString().split('T')[0];
+            allDates.add(dateStr);
+            
+            // Initialize count object for this date
+            if (!dateTaskCounts[dateStr]) {
+              dateTaskCounts[dateStr] = {
+                completed: 0,
+                inProgress: 0,
+                notStarted: 0
+              };
+            }
+            
+            // Count by status
+            if (task.status === 'completed') {
+              dateTaskCounts[dateStr].completed++;
+            } else if (['submitted', 'revision', 'approved'].includes(task.status)) {
+              dateTaskCounts[dateStr].inProgress++;
+            } else {
+              dateTaskCounts[dateStr].notStarted++;
+            }
+          }
         });
       }
     });
@@ -193,35 +161,36 @@ const Reports = () => {
     // Sort dates
     const sortedDates = Array.from(allDates).sort();
     
-    // For each date, sum up the task stats across all projects
+    // Prepare cumulative counts for line chart
+    const cumulativeCounts = {
+      completed: [],
+      inProgress: [],
+      notStarted: [],
+      dates: []
+    };
+    
+    let runningTotals = {
+      completed: 0,
+      inProgress: 0,
+      notStarted: 0
+    };
+    
     sortedDates.forEach(date => {
-      let completedCount = 0;
-      let pendingCount = 0;
-      let overdueCount = 0;
+      const counts = dateTaskCounts[date];
       
-      projects.forEach(project => {
-        if (project.taskHistory) {
-          const historyForDate = project.taskHistory.find(h => h.date === date);
-          if (historyForDate) {
-            completedCount += historyForDate.completed;
-            pendingCount += historyForDate.pending;
-            overdueCount += historyForDate.overdue || 0;
-          }
-        }
-      });
+      // Add to running totals
+      runningTotals.completed += counts.completed;
+      runningTotals.inProgress += counts.inProgress;
+      runningTotals.notStarted += counts.notStarted;
       
-      dates.push(formatDate(date));
-      completed.push(completedCount);
-      pending.push(pendingCount);
-      overdue.push(overdueCount);
+      // Add to arrays
+      cumulativeCounts.completed.push(runningTotals.completed);
+      cumulativeCounts.inProgress.push(runningTotals.inProgress);
+      cumulativeCounts.notStarted.push(runningTotals.notStarted);
+      cumulativeCounts.dates.push(formatDate(date));
     });
     
-    setTaskStats({
-      dates,
-      completed,
-      pending,
-      overdue
-    });
+    setTaskStats(cumulativeCounts);
   };
 
   const handleTabChange = (event, newValue) => {
@@ -233,624 +202,558 @@ const Reports = () => {
     return new Date(dateString).toLocaleDateString(undefined, options);
   };
 
-  const generatePDF = async (project) => {
-    try {
-      console.log('Starting PDF generation for:', project.title);
+  // Check if projects are due within 24 hours
+  useEffect(() => {
+    if (projectData.length > 0) {
+      const now = new Date();
+      const tomorrow = new Date(now);
+      tomorrow.setHours(now.getHours() + 24);
       
-      // Create new document with more compatibility options
+      const projectsDueSoon = projectData.filter(project => {
+        if (!project.dueDate) return false;
+        const dueDate = new Date(project.dueDate);
+        return dueDate >= now && dueDate <= tomorrow;
+      });
+      
+      setDueSoonProjects(projectsDueSoon);
+    }
+  }, [projectData]);
+
+  // Generate PDF of charts
+  const generateChartsPDF = async () => {
+    if (!chartsContainerRef.current) return;
+    
+    try {
+      const doc = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: 'a4'
+      });
+      
+      const canvas = await html2canvas(chartsContainerRef.current, {
+        scale: 2, // Higher scale for better quality
+        backgroundColor: '#212121', // Match dark theme background
+      });
+      
+      const imgData = canvas.toDataURL('image/png');
+      const imgWidth = doc.internal.pageSize.getWidth();
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      
+      doc.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+      doc.save('project_charts.pdf');
+    } catch (error) {
+      console.error('Error generating charts PDF:', error);
+      alert('Failed to generate PDF. Please try again.');
+    }
+  };
+
+  // Helper function to generate PDF report for a project
+  const generateProjectPDF = async (project) => {
+    try {
+      console.log('Starting PDF generation for project:', project.name);
+      
+      // Basic validation
+      if (!project || !project._id) {
+        console.error('Invalid project data:', project);
+        alert('Error: Invalid project data');
+        return;
+      }
+      
       const doc = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
-        format: 'a4',
-        compress: true
+        format: 'a4'
       });
       
       // Add title
       doc.setFontSize(18);
-      doc.text(`Project Report - ${project.title}`, 15, 20);
+      doc.text(`Project Report - ${project.name || 'Unnamed Project'}`, 15, 20);
       
-      // Project details
+      // Project details with error handling
       doc.setFontSize(12);
       doc.text(`Description: ${project.description || 'No description'}`, 15, 35);
-      doc.text(`Start Date: ${formatDate(project.createdAt)}`, 15, 45);
+      doc.text(`Start Date: ${project.createdAt ? formatDate(project.createdAt) : 'Not set'}`, 15, 45);
       doc.text(`Due Date: ${project.dueDate ? formatDate(project.dueDate) : 'Not set'}`, 15, 55);
-      doc.text(`Progress: ${project.progress}%`, 15, 65);
       
-      // Task summary - use simpler data representation
+      // Safely calculate progress
+      let projectProgress = 0;
+      try {
+        projectProgress = calculateProjectProgress(project.tasks);
+      } catch (calcError) {
+        console.error('Error calculating progress:', calcError);
+      }
+      doc.text(`Progress: ${projectProgress}%`, 15, 65);
+      
+      // Task summary with error handling
+      const totalTasks = project.tasks ? project.tasks.length : 0;
+      
+      let taskDistribution = {
+        completed: 0, approved: 0, revision: 0, submitted: 0, assigned: 0
+      };
+      
+      try {
+        if (project.tasks && project.tasks.length > 0) {
+          taskDistribution = {
+            completed: project.tasks.filter(t => t && t.status === 'completed').length,
+            approved: project.tasks.filter(t => t && t.status === 'approved').length,
+            revision: project.tasks.filter(t => t && t.status === 'revision').length,
+            submitted: project.tasks.filter(t => t && t.status === 'submitted').length,
+            assigned: project.tasks.filter(t => t && ['created', 'assigned'].includes(t.status)).length
+          };
+        }
+      } catch (filterError) {
+        console.error('Error filtering tasks:', filterError);
+      }
+      
       doc.text('Task Summary:', 15, 80);
       
       const taskSummaryData = [
-        ['Total Tasks', project.tasks?.total || 0],
-        ['Completed Tasks', project.tasks?.completed || 0],
-        ['Pending Tasks', project.tasks?.pending || 0],
-        ['Overdue Tasks', project.tasks?.overdue || 0]
+        ['Category', 'Count', 'Percentage'],
+        ['Completed', taskDistribution.completed, totalTasks > 0 ? `${Math.round((taskDistribution.completed/totalTasks) * 100)}%` : '0%'],
+        ['Approved', taskDistribution.approved, totalTasks > 0 ? `${Math.round((taskDistribution.approved/totalTasks) * 100)}%` : '0%'],
+        ['Revision', taskDistribution.revision, totalTasks > 0 ? `${Math.round((taskDistribution.revision/totalTasks) * 100)}%` : '0%'],
+        ['Submitted', taskDistribution.submitted, totalTasks > 0 ? `${Math.round((taskDistribution.submitted/totalTasks) * 100)}%` : '0%'],
+        ['Assigned', taskDistribution.assigned, totalTasks > 0 ? `${Math.round((taskDistribution.assigned/totalTasks) * 100)}%` : '0%']
       ];
       
-      // Track the Y position manually
-      let yPosition = 85;
-      
       try {
-        // First table
-        const taskSummaryTable = doc.autoTable({
-          startY: yPosition,
-          head: [['Category', 'Count']],
-          body: taskSummaryData,
+        doc.autoTable({
+          startY: 85,
+          head: [taskSummaryData[0]],
+          body: taskSummaryData.slice(1),
           theme: 'striped',
-          styles: { fontSize: 10 },
-          margin: { left: 15, right: 15 }
         });
-        
-        // Update Y position based on the first table
-        yPosition = taskSummaryTable.lastAutoTable.finalY + 15;
       } catch (tableError) {
-        console.error('Error generating task summary table:', tableError);
-        // Fallback to regular text
-        doc.text(JSON.stringify(taskSummaryData), 15, 85);
-        yPosition = 110; // Manual position for fallback
+        console.error('Error generating table:', tableError);
+        // Fallback to text if table fails
+        doc.text('Task summary could not be generated as a table', 15, 85);
       }
       
-      // Task progress chart - using html2canvas to capture the chart
-      try {
-        // Add task history if available
-        if (project.taskHistory && project.taskHistory.length > 0) {
-          // Create a temporary canvas for the chart
-          const tempCanvas = document.createElement('canvas');
-          tempCanvas.width = 500;
-          tempCanvas.height = 250;
-          tempCanvas.style.display = 'none';
-          document.body.appendChild(tempCanvas);
-          
-          // Create a chart on the temporary canvas
-          const ctx = tempCanvas.getContext('2d');
-          new ChartJS(ctx, {
-            type: 'line',
-            data: {
-              labels: project.taskHistory.map(h => formatDate(h.date)),
-              datasets: [
-                {
-                  label: 'Completed',
-                  data: project.taskHistory.map(h => h.completed),
-                  borderColor: 'rgba(75, 192, 192, 1)',
-                  backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                  fill: true
-                },
-                {
-                  label: 'Pending',
-                  data: project.taskHistory.map(h => h.pending),
-                  borderColor: 'rgba(255, 159, 64, 1)',
-                  backgroundColor: 'rgba(255, 159, 64, 0.2)',
-                  fill: true
-                },
-                {
-                  label: 'Overdue',
-                  data: project.taskHistory.map(h => h.overdue || 0),
-                  borderColor: 'rgba(255, 99, 132, 1)',
-                  backgroundColor: 'rgba(255, 99, 132, 0.2)',
-                  fill: true
-                }
-              ]
-            },
-            options: {
-              responsive: false,
-              animation: false,
-              plugins: {
-                legend: {
-                  display: true,
-                  position: 'top',
-                },
-                title: {
-                  display: true,
-                  text: 'Task Progress Over Time'
-                }
-              },
-              scales: {
-                y: {
-                  beginAtZero: true
-                }
-              }
-            }
-          });
-          
-          // Add title for chart
-          doc.text('Task Progress Chart:', 15, yPosition);
-          yPosition += 5;
-          
-          // Convert chart to image and add to PDF
-          const imgData = tempCanvas.toDataURL('image/png');
-          doc.addImage(imgData, 'PNG', 15, yPosition, 180, 90);
-          
-          // Update position
-          yPosition += 95;
-          
-          // Remove temporary canvas
-          document.body.removeChild(tempCanvas);
-        } else {
-          doc.text('No task history data available for this project', 15, yPosition);
-          yPosition += 10;
-        }
-        
-      } catch (chartError) {
-        console.error('Error generating chart for PDF:', chartError);
-        doc.text('Chart could not be generated', 15, yPosition);
-        yPosition += 10;
-        
-        // As fallback, add table instead
-        if (project.taskHistory && project.taskHistory.length > 0) {
-          doc.text('Task Progress Timeline (Fallback):', 15, yPosition);
-          yPosition += 10;
-          
-          const progressData = project.taskHistory.map(h => [
-            formatDate(h.date),
-            h.completed.toString(),
-            h.pending.toString(),
-            (h.overdue || 0).toString()
-          ]);
-          
-          try {
-            doc.autoTable({
-              startY: yPosition,
-              head: [['Date', 'Completed', 'Pending', 'Overdue']],
-              body: progressData,
-              theme: 'grid',
-              styles: { fontSize: 9 },
-              margin: { left: 15, right: 15 }
-            });
-          } catch (tableError) {
-            console.error('Error generating fallback progress table:', tableError);
-            doc.text('Progress data not rendered due to error', 15, yPosition);
-          }
-        }
-      }
-      
-      // Add generated date
+      // Add date generated
       const currentDate = new Date().toLocaleDateString();
-      doc.setFontSize(8);
+      doc.setFontSize(10);
       doc.text(`Report generated on: ${currentDate}`, 15, 280);
       
-      // Save with just the project name as filename
-      const cleanTitle = project.title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-      const filename = `${cleanTitle}_report.pdf`;
+      const filename = `${project.name ? project.name.replace(/[^a-z0-9]/gi, '_').toLowerCase() : 'project'}_report.pdf`;
+      console.log('Attempting to save PDF as:', filename);
       
-      console.log('PDF generated successfully, attempting to save as:', filename);
       doc.save(filename);
       console.log('PDF saved successfully');
-      
     } catch (error) {
       console.error('Detailed error generating PDF:', error);
-      const errorMessage = error?.message || 'Unknown error';
-      const errorStack = error?.stack || 'No stack trace';
-      console.error('Error message:', errorMessage);
-      console.error('Stack trace:', errorStack);
-      
-      alert(`Error generating PDF: ${errorMessage}. Please check the browser console for details.`);
+      alert(`Failed to generate PDF: ${error.message || 'Unknown error'}`);
     }
-  };
-
-  // Refresh the report data
-  const refreshData = async () => {
-    setLoading(true);
-    try {
-      // Clear the current data
-      setProjectData([]);
-      setTaskStats({
-        completed: [],
-        pending: [],
-        overdue: [],
-        dates: []
-      });
-      
-      // Fetch the data again
-      const dashboardResponse = await reportAPI.getDashboardData();
-      const reportResponse = await reportAPI.getTasksReport();
-      
-      // Process the data
-      if (dashboardResponse.data) {
-        const projects = dashboardResponse.data.recentProjects || [];
-        
-        const enhancedProjects = await Promise.all(projects.map(async (project) => {
-          try {
-            const projectReportResponse = await reportAPI.getProjectReport(project.id);
-            
-            if (projectReportResponse.data) {
-              return {
-                ...project,
-                progress: calculateProgress(projectReportResponse.data.stats),
-                tasks: {
-                  total: projectReportResponse.data.stats.totalTasks,
-                  completed: projectReportResponse.data.stats.completedTasks,
-                  pending: projectReportResponse.data.stats.pendingTasks,
-                  overdue: 0
-                },
-                taskHistory: generateTaskHistory(project, projectReportResponse.data.tasks)
-              };
-            }
-            return project;
-          } catch (error) {
-            console.error(`Error fetching details for project ${project.id}:`, error);
-            return project;
-          }
-        }));
-        
-        setProjectData(enhancedProjects);
-        processTaskStats(enhancedProjects);
-      }
-    } catch (error) {
-      console.error('Error refreshing data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Project overview chart data
-  const projectOverviewData = {
-    labels: projectData.map(project => project.title),
-    datasets: [
-      {
-        label: 'Progress (%)',
-        data: projectData.map(project => project.progress),
-        backgroundColor: 'rgba(75, 192, 192, 0.6)',
-        borderColor: 'rgba(75, 192, 192, 1)',
-        borderWidth: 1,
-      }
-    ]
-  };
-
-  // Task distribution chart data
-  const taskDistributionData = {
-    labels: ['Completed', 'Pending', 'Overdue'],
-    datasets: [
-      {
-        data: [
-          projectData.reduce((acc, project) => acc + (project.tasks?.completed || 0), 0),
-          projectData.reduce((acc, project) => acc + (project.tasks?.pending || 0), 0),
-          projectData.reduce((acc, project) => acc + (project.tasks?.overdue || 0), 0)
-        ],
-        backgroundColor: [
-          'rgba(75, 192, 192, 0.6)',
-          'rgba(255, 159, 64, 0.6)',
-          'rgba(255, 99, 132, 0.6)'
-        ],
-        borderColor: [
-          'rgba(75, 192, 192, 1)',
-          'rgba(255, 159, 64, 1)',
-          'rgba(255, 99, 132, 1)'
-        ],
-        borderWidth: 1,
-      }
-    ]
-  };
-
-  // Task progress over time chart data
-  const taskProgressData = {
-    labels: taskStats.dates,
-    datasets: [
-      {
-        label: 'Completed Tasks',
-        data: taskStats.completed,
-        fill: true,
-        backgroundColor: 'rgba(75, 192, 192, 0.2)',
-        borderColor: 'rgba(75, 192, 192, 1)',
-        tension: 0.4,
-      },
-      {
-        label: 'Pending Tasks',
-        data: taskStats.pending,
-        fill: true,
-        backgroundColor: 'rgba(255, 159, 64, 0.2)',
-        borderColor: 'rgba(255, 159, 64, 1)',
-        tension: 0.4,
-      },
-      {
-        label: 'Overdue Tasks',
-        data: taskStats.overdue,
-        fill: true,
-        backgroundColor: 'rgba(255, 99, 132, 0.2)',
-        borderColor: 'rgba(255, 99, 132, 1)',
-        tension: 0.4,
-      }
-    ]
   };
 
   return (
-    <Box>
-      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Typography variant="h4" sx={{ fontWeight: 'medium' }}>
-          Generate Report
+    <Box sx={{ 
+      p: { xs: 2, md: 4 }, 
+      bgcolor: 'black', 
+      color: 'white',
+      minHeight: '100vh',
+      display: 'flex',
+      flexDirection: 'column'
+    }}>
+      <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold', letterSpacing: 1.2 }}>
+          PROJECT REPORTS
         </Typography>
-        <Button 
-          variant="outlined" 
-          startIcon={<RefreshIcon />}
-          onClick={refreshData}
-          sx={{ borderRadius: 2 }}
-        >
-          Refresh Data
-        </Button>
+        <Box>
+          <Button 
+            startIcon={<RefreshIcon />} 
+            onClick={() => window.location.reload()}
+            sx={{ 
+              color: 'white',
+              bgcolor: 'rgba(255,255,255,0.1)',
+              '&:hover': { bgcolor: 'rgba(255,255,255,0.2)' },
+              px: 3,
+              py: 1
+            }}
+          >
+            Refresh
+          </Button>
+        </Box>
       </Box>
 
+      <Tabs 
+        value={tabValue} 
+        onChange={handleTabChange}
+        sx={{ 
+          mb: 3, 
+          borderBottom: 1, 
+          borderColor: 'rgba(255,255,255,0.2)',
+          '& .MuiTab-root': { 
+            color: 'rgba(255,255,255,0.7)',
+            fontSize: '1rem',
+            fontWeight: 'medium',
+            mx: 1
+          },
+          '& .Mui-selected': { color: 'white' },
+          '& .MuiTabs-indicator': { backgroundColor: 'white', height: '3px' }
+        }}
+      >
+        <Tab label="DASHBOARD" />
+        <Tab label="PROJECT DETAILS" />
+      </Tabs>
+
       {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
-          <CircularProgress />
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flex: 1 }}>
+          <CircularProgress sx={{ color: 'white' }} />
         </Box>
       ) : (
-        <>
-          <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
-            <Tabs 
-              value={tabValue} 
-              onChange={handleTabChange} 
-              textColor="primary"
-              indicatorColor="primary"
-            >
-              <Tab label="Dashboard" />
-              <Tab label="Project Details" />
-            </Tabs>
-          </Box>
-
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
           {/* Dashboard Tab */}
           {tabValue === 0 && (
-            <Box ref={chartsRef}>
-              <Grid container spacing={3}>
-                {/* Project Overview Chart */}
-                <Grid item xs={12} md={8}>
-                  <Card sx={{ borderRadius: 3, boxShadow: 3, height: '100%' }}>
-                    <CardContent>
-                      <Typography variant="h6" sx={{ mb: 2 }}>
-                        Project Progress Overview
-                      </Typography>
-                      <Box sx={{ height: 300 }}>
-                        {projectData.length > 0 ? (
-                          <Bar 
-                            data={projectOverviewData} 
-                            options={{
-                              responsive: true,
-                              maintainAspectRatio: false,
-                              plugins: {
-                                legend: {
-                                  position: 'top',
+            <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+              <Box 
+                ref={chartsContainerRef} 
+                sx={{ 
+                  flex: 1,
+                  display: 'flex',
+                  flexDirection: 'column'
+                }}
+              >
+                <Grid container spacing={3} sx={{ height: '100%', minHeight: '70vh' }}>
+                  {/* Project Progress Overview */}
+                  <Grid item xs={12} md={6} sx={{ display: 'flex', height: '100%' }}>
+                    <Card sx={{ 
+                      borderRadius: 2, 
+                      boxShadow: '0 4px 24px rgba(0,0,0,0.5)', 
+                      bgcolor: '#121212', 
+                      width: '100%',
+                      display: 'flex',
+                      flexDirection: 'column'
+                    }}>
+                      <CardContent sx={{ p: 3, flex: 1, display: 'flex', flexDirection: 'column' }}>
+                        <Typography variant="h6" sx={{ mb: 2, color: 'white', fontWeight: '500', letterSpacing: 0.5, paddingBottom: 1, borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                          Project Progress Overview
+                        </Typography>
+                        <Box sx={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '450px' }}>
+                          {projectData.length > 0 ? (
+                            <Bar 
+                              data={{
+                                labels: projectData.map(project => project.name),
+                                datasets: [
+                                  {
+                                    label: 'Progress (%)',
+                                    data: projectData.map(project => calculateProjectProgress(project.tasks)),
+                                    backgroundColor: projectData.map((_, idx) => Object.values(chartColors)[idx % Object.values(chartColors).length].bg),
+                                    borderColor: projectData.map((_, idx) => Object.values(chartColors)[idx % Object.values(chartColors).length].border),
+                                    borderWidth: 1,
+                                  }
+                                ]
+                              }}
+                              options={{
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                  legend: {
+                                    position: 'top',
+                                  },
+                                  tooltip: {
+                                    callbacks: {
+                                      label: function(context) {
+                                        return `Progress: ${context.raw}%`;
+                                      }
+                                    }
+                                  }
                                 },
-                              },
-                              scales: {
-                                y: {
-                                  beginAtZero: true,
-                                  max: 100
+                                scales: {
+                                  y: {
+                                    beginAtZero: true,
+                                    max: 100,
+                                    title: {
+                                      display: true,
+                                      text: 'Progress (%)'
+                                    },
+                                    ticks: {
+                                      callback: function(value) {
+                                        return value + '%';
+                                      }
+                                    }
+                                  }
+                                },
+                                animation: {
+                                  duration: 1500
                                 }
-                              }
-                            }}
-                          />
-                        ) : (
-                          <Box sx={{ height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                            <Typography variant="body1" color="text.secondary">
-                              No project data available. Create some projects to see reports.
-                            </Typography>
-                          </Box>
-                        )}
-                      </Box>
-                    </CardContent>
-                  </Card>
-                </Grid>
+                              }}
+                            />
+                          ) : (
+                            <Box sx={{ height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                              <Typography variant="body1" color="rgba(255,255,255,0.7)">
+                                No project data available.
+                              </Typography>
+                            </Box>
+                          )}
+                        </Box>
+                      </CardContent>
+                    </Card>
+                  </Grid>
 
-                {/* Task Distribution Pie Chart */}
-                <Grid item xs={12} md={4}>
-                  <Card sx={{ borderRadius: 3, boxShadow: 3, height: '100%' }}>
-                    <CardContent>
-                      <Typography variant="h6" sx={{ mb: 2 }}>
-                        Task Distribution
-                      </Typography>
-                      <Box sx={{ height: 300, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                        {projectData.length > 0 ? (
-                          <Doughnut 
-                            data={taskDistributionData} 
-                            options={{
-                              responsive: true,
-                              maintainAspectRatio: false,
-                              plugins: {
-                                legend: {
-                                  position: 'top',
+                  {/* Task Distribution Pie Chart */}
+                  <Grid item xs={12} md={6} sx={{ display: 'flex', height: '100%' }}>
+                    <Card sx={{ 
+                      borderRadius: 2, 
+                      boxShadow: '0 4px 24px rgba(0,0,0,0.5)', 
+                      bgcolor: '#121212', 
+                      width: '100%',
+                      display: 'flex',
+                      flexDirection: 'column'
+                    }}>
+                      <CardContent sx={{ p: 3, flex: 1, display: 'flex', flexDirection: 'column' }}>
+                        <Typography variant="h6" sx={{ mb: 2, color: 'white', fontWeight: '500', letterSpacing: 0.5, paddingBottom: 1, borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                          Task Distribution
+                        </Typography>
+                        <Box sx={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '450px' }}>
+                          {projectData.length > 0 && projectData.some(p => p.tasks && p.tasks.length > 0) ? (
+                            <Doughnut 
+                              data={{
+                                labels: ['Completed', 'In Progress', 'Not Started'],
+                                datasets: [
+                                  {
+                                    data: [
+                                      projectData.reduce((acc, project) => acc + (project.tasks ? project.tasks.filter(t => t.status === 'completed').length : 0), 0),
+                                      projectData.reduce((acc, project) => acc + (project.tasks ? project.tasks.filter(t => ['submitted', 'revision', 'approved'].includes(t.status)).length : 0), 0),
+                                      projectData.reduce((acc, project) => acc + (project.tasks ? project.tasks.filter(t => ['created', 'assigned'].includes(t.status)).length : 0), 0)
+                                    ],
+                                    backgroundColor: [
+                                      chartColors.green.bg,
+                                      chartColors.orange.bg,
+                                      chartColors.red.bg
+                                    ],
+                                    borderColor: [
+                                      chartColors.green.border,
+                                      chartColors.orange.border,
+                                      chartColors.red.border
+                                    ],
+                                    borderWidth: 1,
+                                  }
+                                ]
+                              }}
+                              options={{
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                  legend: {
+                                    position: 'top',
+                                  },
+                                  tooltip: {
+                                    callbacks: {
+                                      label: function(context) {
+                                        const value = context.raw;
+                                        const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                        const percentage = Math.round((value / total) * 100);
+                                        return `${context.label}: ${value} (${percentage}%)`;
+                                      }
+                                    }
+                                  }
                                 },
-                              },
-                            }}
-                          />
-                        ) : (
-                          <Typography variant="body1" color="text.secondary">
-                            No task data available.
-                          </Typography>
-                        )}
-                      </Box>
-                    </CardContent>
-                  </Card>
-                </Grid>
-
-                {/* Task Progress Line Chart */}
-                <Grid item xs={12}>
-                  <Card sx={{ borderRadius: 3, boxShadow: 3 }}>
-                    <CardContent>
-                      <Typography variant="h6" sx={{ mb: 2 }}>
-                        Task Progress Over Time
-                      </Typography>
-                      <Box sx={{ height: 400 }}>
-                        {taskStats.dates.length > 0 ? (
-                          <Line 
-                            data={taskProgressData} 
-                            options={{
-                              responsive: true,
-                              maintainAspectRatio: false,
-                              plugins: {
-                                legend: {
-                                  position: 'top',
-                                },
-                              },
-                              scales: {
-                                y: {
-                                  beginAtZero: true
+                                animation: {
+                                  duration: 1500
                                 }
-                              }
-                            }}
-                          />
-                        ) : (
-                          <Box sx={{ height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                            <Typography variant="body1" color="text.secondary">
-                              No timeline data available yet. Add tasks and complete them to see progress.
+                              }}
+                            />
+                          ) : (
+                            <Typography variant="body1" color="rgba(255,255,255,0.7)">
+                              No task data available.
                             </Typography>
-                          </Box>
-                        )}
-                      </Box>
-                    </CardContent>
-                  </Card>
+                          )}
+                        </Box>
+                      </CardContent>
+                    </Card>
+                  </Grid>
                 </Grid>
-              </Grid>
+              </Box>
             </Box>
           )}
 
           {/* Project Details Tab */}
           {tabValue === 1 && (
-            <Box ref={projectDetailsRef}>
-              <Card sx={{ borderRadius: 3, boxShadow: 3 }}>
-                <CardContent>
-                  <Typography variant="h6" sx={{ mb: 3 }}>
+            <Box 
+              ref={projectDetailsRef} 
+              sx={{ 
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column'
+              }}
+            >
+              <Card sx={{ 
+                borderRadius: 2, 
+                boxShadow: '0 4px 24px rgba(0,0,0,0.5)', 
+                bgcolor: '#121212',
+                overflow: 'hidden',
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column'
+              }}>
+                <CardContent sx={{ p: 3, flex: 1, display: 'flex', flexDirection: 'column' }}>
+                  <Typography variant="h6" sx={{ 
+                    mb: 3, 
+                    color: 'white', 
+                    fontWeight: '500', 
+                    letterSpacing: 0.5, 
+                    paddingBottom: 1, 
+                    borderBottom: '1px solid rgba(255,255,255,0.1)'
+                  }}>
                     Project Reports
                   </Typography>
                   {projectData.length > 0 ? (
-                    <TableContainer component={Paper} sx={{ backgroundColor: 'background.paper' }}>
-                      <Table>
+                    <TableContainer component={Paper} sx={{ 
+                      backgroundColor: 'transparent', 
+                      boxShadow: 'none',
+                      flex: 1,
+                      display: 'flex',
+                      flexDirection: 'column'
+                    }}>
+                      <Table sx={{ 
+                        '& .MuiTableCell-root': { 
+                          color: 'white', 
+                          borderColor: 'rgba(255, 255, 255, 0.08)',
+                          padding: '16px 12px'
+                        },
+                        '& .MuiTableCell-head': {
+                          fontWeight: 'bold',
+                          backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                          fontSize: '0.9rem',
+                          letterSpacing: '0.5px',
+                          textTransform: 'uppercase'
+                        }
+                      }}>
                         <TableHead>
                           <TableRow>
                             <TableCell>Project Name</TableCell>
                             <TableCell>Progress</TableCell>
                             <TableCell>Start Date</TableCell>
                             <TableCell>Due Date</TableCell>
-                            <TableCell>Tasks (Completed/Total)</TableCell>
+                            <TableCell>Task Distribution</TableCell>
                             <TableCell align="center">Report</TableCell>
                           </TableRow>
                         </TableHead>
                         <TableBody>
-                          {projectData.map((project) => (
-                            <TableRow key={project.id}>
-                              <TableCell>{project.title}</TableCell>
-                              <TableCell>
-                                {project.progress}%
-                              </TableCell>
-                              <TableCell>{formatDate(project.createdAt)}</TableCell>
-                              <TableCell>{project.dueDate ? formatDate(project.dueDate) : 'Not set'}</TableCell>
-                              <TableCell>{`${project.tasks?.completed || 0}/${project.tasks?.total || 0}`}</TableCell>
-                              <TableCell align="center">
-                                <Tooltip title="Download PDF Report">
-                                  <IconButton 
-                                    color="primary" 
-                                    onClick={() => generatePDF(project)}
-                                  >
-                                    <DownloadIcon />
-                                  </IconButton>
-                                </Tooltip>
-                              </TableCell>
-                            </TableRow>
-                          ))}
+                          {projectData.map((project, index) => {
+                            const totalTasks = project.tasks ? project.tasks.length : 0;
+                            const projectProgress = calculateProjectProgress(project.tasks);
+                            
+                            const taskDistribution = {
+                              completed: project.tasks ? project.tasks.filter(t => t.status === 'completed').length : 0,
+                              approved: project.tasks ? project.tasks.filter(t => t.status === 'approved').length : 0,
+                              revision: project.tasks ? project.tasks.filter(t => t.status === 'revision').length : 0,
+                              submitted: project.tasks ? project.tasks.filter(t => t.status === 'submitted').length : 0,
+                              assigned: project.tasks ? project.tasks.filter(t => ['created', 'assigned'].includes(t.status)).length : 0
+                            };
+                            
+                            return (
+                              <TableRow 
+                                key={project._id}
+                                sx={{ 
+                                  bgcolor: index % 2 === 0 ? '#121212' : 'rgba(255, 255, 255, 0.03)',
+                                  transition: 'all 0.2s',
+                                  '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.07)' } 
+                                }}
+                              >
+                                <TableCell>
+                                  <Typography variant="body1" sx={{ fontWeight: 'medium' }}>
+                                    {project.name}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell>
+                                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                    <Box sx={{ 
+                                      width: 50, 
+                                      height: 50, 
+                                      display: 'flex', 
+                                      alignItems: 'center', 
+                                      justifyContent: 'center',
+                                      borderRadius: '50%',
+                                      border: '2px solid rgba(255, 255, 255, 0.4)',
+                                      background: `linear-gradient(0deg, rgba(255, 255, 255, 0.15) ${projectProgress}%, transparent ${projectProgress}%)`,
+                                      mr: 1
+                                    }}>
+                                      <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                                        {projectProgress}%
+                                      </Typography>
+                                    </Box>
+                                  </Box>
+                                </TableCell>
+                                <TableCell>{formatDate(project.createdAt)}</TableCell>
+                                <TableCell>
+                                  {project.dueDate ? formatDate(project.dueDate) : 'Not set'}
+                                </TableCell>
+                                <TableCell>
+                                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.8 }}>
+                                    <Typography variant="body2" sx={{ 
+                                      color: 'white',
+                                      display: 'flex',
+                                      justifyContent: 'space-between'
+                                    }}>
+                                      <span>Completed:</span> 
+                                      <span>{taskDistribution.completed} ({totalTasks > 0 ? Math.round((taskDistribution.completed/totalTasks) * 100) : 0}%)</span>
+                                    </Typography>
+                                    <Typography variant="body2" sx={{ 
+                                      color: 'white',
+                                      display: 'flex',
+                                      justifyContent: 'space-between'
+                                    }}>
+                                      <span>Approved:</span>
+                                      <span>{taskDistribution.approved} ({totalTasks > 0 ? Math.round((taskDistribution.approved/totalTasks) * 100) : 0}%)</span>
+                                    </Typography>
+                                    <Typography variant="body2" sx={{ 
+                                      color: 'white',
+                                      display: 'flex',
+                                      justifyContent: 'space-between'
+                                    }}>
+                                      <span>Revision:</span>
+                                      <span>{taskDistribution.revision} ({totalTasks > 0 ? Math.round((taskDistribution.revision/totalTasks) * 100) : 0}%)</span>
+                                    </Typography>
+                                    <Typography variant="body2" sx={{ 
+                                      color: 'white',
+                                      display: 'flex',
+                                      justifyContent: 'space-between'
+                                    }}>
+                                      <span>Submitted:</span>
+                                      <span>{taskDistribution.submitted} ({totalTasks > 0 ? Math.round((taskDistribution.submitted/totalTasks) * 100) : 0}%)</span>
+                                    </Typography>
+                                    <Typography variant="body2" sx={{ 
+                                      color: 'white',
+                                      display: 'flex',
+                                      justifyContent: 'space-between'
+                                    }}>
+                                      <span>Assigned:</span>
+                                      <span>{taskDistribution.assigned} ({totalTasks > 0 ? Math.round((taskDistribution.assigned/totalTasks) * 100) : 0}%)</span>
+                                    </Typography>
+                                  </Box>
+                                </TableCell>
+                                <TableCell align="center">
+                                  <Tooltip title="Download PDF Report">
+                                    <IconButton 
+                                      sx={{ 
+                                        color: 'white',
+                                        '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' }
+                                      }} 
+                                      onClick={() => generateProjectPDF(project)}
+                                    >
+                                      <DownloadIcon />
+                                    </IconButton>
+                                  </Tooltip>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
                         </TableBody>
                       </Table>
                     </TableContainer>
                   ) : (
-                    <Box sx={{ py: 4, display: 'flex', justifyContent: 'center' }}>
-                      <Typography variant="body1" color="text.secondary">
+                    <Box sx={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                      <Typography variant="body1" color="rgba(255,255,255,0.7)">
                         No projects found. Create a project to generate reports.
                       </Typography>
                     </Box>
                   )}
                 </CardContent>
               </Card>
-
-              {/* Individual Project Charts */}
-              {projectData.length > 0 && (
-                <>
-                  <Typography variant="h6" sx={{ mt: 4, mb: 2 }}>
-                    Individual Project Progress
-                  </Typography>
-
-                  <Grid container spacing={3}>
-                    {projectData.map((project) => (
-                      <Grid item xs={12} md={6} key={project.id}>
-                        <Card sx={{ borderRadius: 3, boxShadow: 3 }}>
-                          <CardContent>
-                            <Typography variant="h6" sx={{ mb: 2 }}>
-                              {project.title}
-                            </Typography>
-                            <Divider sx={{ mb: 2 }} />
-                            <Box sx={{ height: 300 }}>
-                              {project.taskHistory && project.taskHistory.length > 0 ? (
-                                <Line 
-                                  data={{
-                                    labels: project.taskHistory.map(h => formatDate(h.date)),
-                                    datasets: [
-                                      {
-                                        label: 'Completed',
-                                        data: project.taskHistory.map(h => h.completed),
-                                        fill: true,
-                                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                                        borderColor: 'rgba(75, 192, 192, 1)',
-                                        tension: 0.4,
-                                      },
-                                      {
-                                        label: 'Pending',
-                                        data: project.taskHistory.map(h => h.pending),
-                                        fill: true,
-                                        backgroundColor: 'rgba(255, 159, 64, 0.2)',
-                                        borderColor: 'rgba(255, 159, 64, 1)',
-                                        tension: 0.4,
-                                      },
-                                      {
-                                        label: 'Overdue',
-                                        data: project.taskHistory.map(h => h.overdue || 0),
-                                        fill: true,
-                                        backgroundColor: 'rgba(255, 99, 132, 0.2)',
-                                        borderColor: 'rgba(255, 99, 132, 1)',
-                                        tension: 0.4,
-                                      }
-                                    ]
-                                  }} 
-                                  options={{
-                                    responsive: true,
-                                    maintainAspectRatio: false,
-                                    plugins: {
-                                      legend: {
-                                        position: 'top',
-                                      },
-                                      title: {
-                                        display: false,
-                                        text: 'Task Progress'
-                                      }
-                                    },
-                                    scales: {
-                                      y: {
-                                        beginAtZero: true
-                                      }
-                                    }
-                                  }}
-                                />
-                              ) : (
-                                <Box sx={{ height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                                  <Typography variant="body1" color="text.secondary">
-                                    No task history available for this project.
-                                  </Typography>
-                                </Box>
-                              )}
-                            </Box>
-                            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
-                              <Button 
-                                variant="contained" 
-                                startIcon={<DownloadIcon />}
-                                onClick={() => generatePDF(project)}
-                                size="small"
-                              >
-                                Download Report
-                              </Button>
-                            </Box>
-                          </CardContent>
-                        </Card>
-                      </Grid>
-                    ))}
-                  </Grid>
-                </>
-              )}
             </Box>
           )}
-        </>
+        </Box>
       )}
     </Box>
   );

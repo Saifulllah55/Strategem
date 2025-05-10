@@ -3,76 +3,75 @@ import User from "../models/user.model.js";
 import Task from "../models/task.model.js";
 import { createActivity } from "./activity.controller.js";
 
-
-
-export const createProject = async (req, res) => {
-  try {
-    const { name, description, members = [], tools } = req.body;
-
-    if (!name) {
-      return res.status(400).json({ message: "Project name is required" });
+export const projectController = {
+  // Get all projects
+  getAllProjects: async (req, res) => {
+    try {
+      const projects = await Project.find()
+        .populate('tasks');
+      res.json(projects);
+    } catch (error) {
+      res.status(500).json({ message: error.message });
     }
+  },
 
-    const ownerId = req.user._id;
-
-    const uniqueMemberIds = [...new Set(members.map((id) => id.toString()))];
-
-    const users = await User.find({ _id: { $in: uniqueMemberIds } });
-    const foundUserIds = users.map((user) => user._id.toString());
-
-    const notFound = uniqueMemberIds.filter((id) => !foundUserIds.includes(id));
-    if (notFound.length > 0) {
-      return res
-        .status(404)
-        .json({ message: `Users not found: ${notFound.join(", ")}` });
+  // Get project by ID
+  getProjectById: async (req, res) => {
+    try {
+      const project = await Project.findById(req.params.id)
+        .populate('tasks');
+      if (!project) return res.status(404).json({ message: 'Project not found' });
+      res.json(project);
+    } catch (error) {
+      res.status(500).json({ message: error.message });
     }
+  },
 
-    const formattedMembers = users.map((user) => ({
-      user: user._id,
-      role: "member",
-      joinedAt: new Date(),
-    }));
+  // Create new project
+  createProject: async (req, res) => {
+    try {
+      const project = new Project(req.body);
+      const savedProject = await project.save();
+      res.status(201).json(savedProject);
+    } catch (error) {
+      res.status(400).json({ message: error.message });
+    }
+  },
 
-    formattedMembers.push({
-      user: ownerId,
-      role: "lead",
-      joinedAt: new Date(),
-    });
+  // Update project
+  updateProject: async (req, res) => {
+    try {
+      const project = await Project.findByIdAndUpdate(
+        req.params.id,
+        { ...req.body },
+        { new: true }
+      ).populate('tasks');
+      
+      if (!project) return res.status(404).json({ message: 'Project not found' });
+      
+      // Recalculate progress after update
+      await project.calculateProgress();
+      
+      res.json(project);
+    } catch (error) {
+      res.status(400).json({ message: error.message });
+    }
+  },
 
-    const newProject = new Project({
-      name,
-      description,
-      owner: ownerId,
-      members: formattedMembers,
-      tools: {
-        messageBoard: tools?.messageBoard || false,
-        todos: tools?.todos || false,
-        docsFiles: tools?.docsFiles || false,
-        chat: tools?.chat || false,
-        schedule: tools?.schedule || false,
-        cardTable: tools?.cardTable || false,
-      },
-      announcements: [
-        {
-          announcer: ownerId,
-          text: "Welcome to the project! Let's collaborate effectively by using the right tools for each task.",
-          createdAt: new Date(),
-        },
-      ],
-    });
-
-    const savedProject = await newProject.save();
-
-    const allUserIds = [...new Set([...uniqueMemberIds, ownerId.toString()])];
-    await User.updateMany(
-      { _id: { $in: allUserIds } },
-      { $addToSet: { projects: savedProject._id } }
-    );
-
-    res.status(201).json(savedProject);
-  } catch (err) {
-    console.error("Create Project Error:", err.message);
-    res.status(500).json({ message: "Server error", error: err.message });
+  // Delete project
+  deleteProject: async (req, res) => {
+    try {
+      const project = await Project.findById(req.params.id);
+      if (!project) return res.status(404).json({ message: 'Project not found' });
+      
+      // Delete all tasks associated with the project
+      await Task.deleteMany({ project: project._id });
+      
+      await project.remove();
+      res.json({ message: 'Project deleted successfully' });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
   }
 };
 
@@ -86,6 +85,7 @@ export const getUserProjects = async (req, res) => {
         { path: "owner", select: "name email" },
         { path: "members.user", select: "name email" },
         { path: "announcements.announcer", select: "name email" },
+        { path: "tasks" }
       ],
       options: { sort: { updatedAt: -1 } },
     });
@@ -94,42 +94,15 @@ export const getUserProjects = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
+    // Calculate progress for each project
+    for (let project of user.projects) {
+      await project.calculateProgress();
+    }
+
     res.status(200).json(user.projects);
   } catch (error) {
     console.error("Failed to fetch user projects:", error);
     res.status(500).json({ message: "Server error while fetching projects" });
-  }
-};
-
-export const getProjectById = async (req, res) => {
-  const { projectId } = req.params;
-  const userId = req.user._id;
-
-  try {
-    if (!projectId.match(/^[0-9a-fA-F]{24}$/)) {
-      return res.status(400).json({ message: "Invalid project ID format" });
-    }
-
-    const user = await User.findById(userId);
-    if (!user || !user.projects.includes(projectId)) {
-      return res
-        .status(403)
-        .json({ message: "Access denied: not a project member or owner" });
-    }
-
-    const project = await Project.findById(projectId)
-      .populate("owner", "name email")
-      .populate("members.user", "name email")
-      .populate("announcements.announcer", "name email");
-
-    if (!project) {
-      return res.status(404).json({ message: "Project not found" });
-    }
-
-    res.status(200).json(project);
-  } catch (error) {
-    console.error("Error fetching project by projectId:", error);
-    res.status(500).json({ message: "Server error while fetching project" });
   }
 };
 
@@ -177,10 +150,11 @@ export const createTaskForProject = async (req, res) => {
       task._id
     );
 
-    // Update project's tasks array
-    await Project.findByIdAndUpdate(projectId, {
-      $push: { tasks: task._id },
-    });
+    // Get updated project with tasks
+    const project = await Project.findById(projectId).populate('tasks');
+    
+    // Recalculate project progress
+    await project.calculateProgress();
 
     res.status(201).json(task);
   } catch (error) {

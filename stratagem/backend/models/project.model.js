@@ -59,12 +59,6 @@ const projectSchema = new mongoose.Schema(
         default: false,
       },
     },
-    tasks: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Task",
-      },
-    ],
     announcements: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -79,23 +73,49 @@ const projectSchema = new mongoose.Schema(
     },
     dueDate: {
       type: Date
-    }
+    },
+    status: { type: String, default: 'planning' },
+    startDate: Date,
+    endDate: Date,
+    priority: { type: String, default: 'medium' },
+    createdAt: { type: Date, default: Date.now },
+    updatedAt: { type: Date, default: Date.now }
   },
   { timestamps: true }
 );
+
+// Virtual for tasks
+projectSchema.virtual('tasks', {
+  ref: 'Task',
+  localField: '_id',
+  foreignField: 'project'
+});
+
+projectSchema.set('toObject', { virtuals: true });
+projectSchema.set('toJSON', { virtuals: true });
 
 // Add a method to calculate project progress
 projectSchema.methods.calculateProgress = async function() {
   const Task = mongoose.model('Task');
   const tasks = await Task.find({ project: this._id });
-  
+
   if (tasks.length === 0) {
     this.progress = 0;
     return;
   }
 
-  const completedTasks = tasks.filter(task => task.status === 'completed').length;
-  this.progress = Math.round((completedTasks / tasks.length) * 100);
+  // Option 2: weighted average
+  function getTaskProgress(status) {
+    if (status === 'submitted') return 25;
+    if (status === 'revision') return 50;
+    if (status === 'approved') return 75;
+    if (status === 'completed') return 100;
+    // created, assigned
+    return 0;
+  }
+
+  const total = tasks.reduce((sum, task) => sum + getTaskProgress(task.status), 0);
+  this.progress = Math.round(total / tasks.length);
   await this.save();
 };
 
