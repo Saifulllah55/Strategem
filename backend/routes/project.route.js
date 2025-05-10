@@ -1,10 +1,15 @@
 import express from "express";
-import { createProject, getUserProjects } from "../controllers/project.controller.js";
+import { createProject, createTaskForProject, getProjectById, getTasksByProjectId, getUserProjects, updateTaskForProject, createAnnouncement } from "../controllers/project.controller.js";
 import { protectRoute } from "../middleware/auth.middleware.js";
+
 
 const router = express.Router();
 
 router.post("/create", protectRoute, createProject);
-router.get("/getall", protectRoute,getUserProjects );
+router.get("/getall", protectRoute, getUserProjects);
+router.get("/:projectId", protectRoute, getProjectById);
+router.post("/:projectId/announcement", protectRoute, createAnnouncement);
+
+
 
 export default router;

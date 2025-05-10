@@ -1,6 +1,7 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-import api from "../../lib//axios"; // Assuming api instance is set up
+import api from "../../lib/axios";
 
+// Thunk to fetch all projects
 export const fetchProjects = createAsyncThunk(
   "projects/fetchAll",
   async (_, { rejectWithValue }) => {
@@ -15,11 +16,33 @@ export const fetchProjects = createAsyncThunk(
   }
 );
 
+// Thunk to fetch a single project by ID
+export const fetchProjectById = createAsyncThunk(
+  "projects/fetchById",
+  async (projectId, { rejectWithValue, getState }) => {
+    
+    const state = getState();
+    if (state.projects.byId[projectId]) {
+      return state.projects.byId[projectId]; 
+    }
+    try {
+      const response = await api.get(`/projects/${projectId}`);
+      return response.data;
+    } catch (err) {
+      console.error(err);
+      return rejectWithValue(
+        err.response?.data?.message || "Failed to fetch project"
+      );
+    }
+  }
+);
+
+// Thunk to create a new project
 export const createProject = createAsyncThunk(
-  "projects/createProject",
+  "projects/create",
   async (projectData, { rejectWithValue }) => {
     try {
-      const response = await api.post("/projects/create", projectData); // Direct API call to create project
+      const response = await api.post("/projects/create", projectData);
       return response.data;
     } catch (err) {
       return rejectWithValue(
@@ -29,10 +52,16 @@ export const createProject = createAsyncThunk(
   }
 );
 
+// Initial state
 const initialState = {
-  projects: [],
-  fetchLoading: false,
-  fetchError: null,
+  byId: {},
+  allIds: [],
+
+  fetchAllLoading: false,
+  fetchAllError: null,
+
+  fetchSingleLoading: false,
+  fetchSingleError: null,
 
   createLoading: false,
   createError: null,
@@ -40,6 +69,7 @@ const initialState = {
   createdProject: null,
 };
 
+// Slice
 const projectSlice = createSlice({
   name: "projects",
   initialState,
@@ -52,31 +82,60 @@ const projectSlice = createSlice({
     },
   },
   extraReducers: (builder) => {
-    // Fetch Projects
+    // Fetch all projects
     builder.addCase(fetchProjects.pending, (state) => {
-      state.fetchLoading = true;
-      state.fetchError = null;
+      state.fetchAllLoading = true;
+      state.fetchAllError = null;
     });
     builder.addCase(fetchProjects.fulfilled, (state, action) => {
-      state.fetchLoading = false;
-      state.projects = action.payload; // Set fetched projects
+      state.fetchAllLoading = false;
+      const projects = action.payload;
+      state.byId = {};
+      state.allIds = [];
+
+      projects.forEach((project) => {
+        state.byId[project._id] = project;
+        state.allIds.push(project._id);
+      });
     });
     builder.addCase(fetchProjects.rejected, (state, action) => {
-      state.fetchLoading = false;
-      state.fetchError = action.payload;
+      state.fetchAllLoading = false;
+      state.fetchAllError = action.payload;
     });
 
-    // Create Project
+    // Fetch single project by ID
+    builder.addCase(fetchProjectById.pending, (state) => {
+      state.fetchSingleLoading = true;
+      state.fetchSingleError = null;
+    });
+    builder.addCase(fetchProjectById.fulfilled, (state, action) => {
+      state.fetchSingleLoading = false;
+      const project = action.payload;
+      state.byId[project._id] = project;
+      if (!state.allIds.includes(project._id)) {
+        state.allIds.push(project._id);
+      }
+    });
+    builder.addCase(fetchProjectById.rejected, (state, action) => {
+      state.fetchSingleLoading = false;
+      state.fetchSingleError = action.payload;
+    });
+
+    // Create project
     builder.addCase(createProject.pending, (state) => {
       state.createLoading = true;
       state.createError = null;
       state.createSuccess = false;
     });
     builder.addCase(createProject.fulfilled, (state, action) => {
+      const project = action.payload;
       state.createLoading = false;
       state.createSuccess = true;
-      state.createdProject = action.payload;
-      state.projects.push(action.payload); // Add the new project to list
+      state.createdProject = project;
+      state.byId[project._id] = project;
+      if (!state.allIds.includes(project._id)) {
+        state.allIds.push(project._id);
+      }
     });
     builder.addCase(createProject.rejected, (state, action) => {
       state.createLoading = false;

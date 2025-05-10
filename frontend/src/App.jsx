@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import HomePage from "./pages/HomePage";
 import LandingPage from "./pages/LandingPage";
@@ -10,6 +10,7 @@ import { setUser } from "./Store/features/userSlice";
 import LoginPage from "./pages/LoginPage";
 import ProjectPage from "./pages/ProjectPage";
 import { fetchProjects } from "./Store/features/projectSlice";
+import ModalComponent from "./components/ModalComponent";
 
 function App() {
   const dispatch = useDispatch();
@@ -29,11 +30,8 @@ function App() {
     }
   }, [dispatch]);
 
-  useEffect(() => {
-    dispatch(fetchProjects());
-  }, [dispatch]);
 
-  return (
+  return (    
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<LandingPage />}></Route>

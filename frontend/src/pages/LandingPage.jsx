@@ -20,7 +20,7 @@ function HomePage() {
         </p>
         <Link to={"/create"}>
           <button className="mt-8 px-6 py-3 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded shadow-lg transition duration-300">
-            Create Kanban Board
+            Create Project
           </button>
         </Link>
       </section>

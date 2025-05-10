@@ -4,18 +4,17 @@ import { useDispatch, useSelector } from "react-redux";
 import { fetchUsers } from "../Store/features/allUsersSlice.js";
 import { createProject } from "../Store/features/projectSlice.js";
 import ProjectToolCard from "../components/ProjectToolCard.jsx";
-import ProjectUserRow from "../components/ProjectUserRow";
 
 const CreatePage = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
-  const { users, loading, error } = useSelector((state) => state.users || {});
+  const { users = [], loading, error } = useSelector((state) => state.users || {});
 
   const [projectName, setProjectName] = useState("");
   const [projectDescription, setProjectDescription] = useState("");
   const [tools, setTools] = useState({
     messageBoard: false,
-    todos: false,
+    tasks: false,
     docsFiles: false,
     chat: false,
     schedule: false,
@@ -23,6 +22,7 @@ const CreatePage = () => {
   });
 
   const [selectedUsers, setSelectedUsers] = useState([]);
+  const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
     dispatch(fetchUsers());
@@ -30,22 +30,17 @@ const CreatePage = () => {
 
   const toggleTool = (tool) => {
     setTools((prev) => ({ ...prev, [tool]: !prev[tool] }));
-    console.log(tools)
   };
 
   const toggleUserSelect = (user) => {
-    if (selectedUsers.find((u) => u._id === user._id)) {
-      setSelectedUsers((prev) => prev.filter((u) => u._id !== user._id));
-    } else {
-      setSelectedUsers((prev) => [...prev, user]);
-    }
+    setSelectedUsers((prev) =>
+      prev.find((u) => u._id === user._id)
+        ? prev.filter((u) => u._id !== user._id)
+        : [...prev, user]
+    );
   };
 
   const handleCreateProject = async () => {
-
-
-
-
     if (!projectName.trim()) {
       alert("Please provide a project name");
       return;
@@ -58,14 +53,11 @@ const CreatePage = () => {
       tools,
     };
 
-    console.log(projectData);
-
-
     try {
       const resultAction = await dispatch(createProject(projectData));
       if (createProject.fulfilled.match(resultAction)) {
         alert("Project created successfully!");
-        navigate("/dashboard");
+        navigate("/projects");
       } else {
         throw new Error(resultAction.payload || "Failed to create project");
       }
@@ -74,83 +66,130 @@ const CreatePage = () => {
     }
   };
 
+  const filteredUsers = users
+    .filter((u) =>
+      u.username.toLowerCase().includes(searchTerm.toLowerCase()) &&
+      !selectedUsers.some((sel) => sel._id === u._id)
+    )
+    .slice(0, 5);
+
   return (
-    <div style={{ minHeight: "100vh", background: "#121620", color: "white", padding: "2rem" }}>
-      <div style={{ maxWidth: "800px", margin: "0 auto" }}>
-        <h1 style={{ fontSize: "1.5rem", fontWeight: "bold", textAlign: "center", marginBottom: "1.5rem" }}>
-          Make a new project
-        </h1>
+    <div className="min-h-screen bg-[#121620] text-white p-8">
+      <div className="max-w-4xl mx-auto space-y-8">
+        <h1 className="text-2xl font-bold text-center">Make a new project</h1>
 
         {/* Basics */}
-        <div style={{ marginBottom: "2rem", background: "#1c2331", padding: "1.5rem", borderRadius: "8px" }}>
-          <h2 style={{ fontSize: "1.25rem", fontWeight: "600", marginBottom: "1rem" }}>1. Start with the basics</h2>
-          <div style={{ marginBottom: "1rem" }}>
-            <label>Project Name</label>
+        <section className="bg-[#1c2331] p-6 rounded-xl space-y-4">
+          <h2 className="text-xl font-semibold">1. Start with the basics</h2>
+          <div>
+            <label className="block text-sm mb-1">Project Name</label>
             <input
               type="text"
               placeholder="e.g. Office Renovation"
               value={projectName}
               onChange={(e) => setProjectName(e.target.value)}
-              style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem", background: "#2c323f", border: "1px solid #3a404e", color: "white", borderRadius: "4px" }}
+              className="w-full p-2 bg-[#2c323f] border border-[#3a404e] text-white rounded-md"
             />
           </div>
-          <div style={{ marginBottom: "1rem" }}>
-            <label>Description</label>
+          <div>
+            <label className="block text-sm mb-1">Description</label>
             <textarea
               placeholder="e.g. Plans and scheduling for expanding the office"
               value={projectDescription}
               onChange={(e) => setProjectDescription(e.target.value)}
-              style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem", background: "#2c323f", border: "1px solid #3a404e", color: "white", borderRadius: "4px" }}
+              className="w-full p-2 bg-[#2c323f] border border-[#3a404e] text-white rounded-md"
             />
           </div>
-        </div>
+        </section>
 
         {/* Tools */}
-        <div style={{ marginBottom: "2rem", background: "#1c2331", padding: "1.5rem", borderRadius: "8px" }}>
-          <h2 style={{ fontSize: "1.25rem", fontWeight: "600", marginBottom: "1rem" }}>2. Choose your tools</h2>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "1rem" }}>
+        <section className="bg-[#1c2331] p-6 rounded-xl">
+          <h2 className="text-xl font-semibold mb-4">2. Choose your tools</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             <ProjectToolCard title="Message Board" icon="📝" isEnabled={tools.messageBoard} onToggle={() => toggleTool("messageBoard")} description="Post announcements, pitch ideas, progress updates, etc." />
-            <ProjectToolCard title="To-dos" icon="✅" isEnabled={tools.todos} onToggle={() => toggleTool("todos")} description="Make lists of work that needs to get done." />
+            <ProjectToolCard title="To-dos" icon="✅" isEnabled={tools.tasks} onToggle={() => toggleTool("tasks")} description="Make lists of work that needs to get done." />
             <ProjectToolCard title="Docs & Files" icon="📄" isEnabled={tools.docsFiles} onToggle={() => toggleTool("docsFiles")} description="Share docs, files, images, and spreadsheets." />
             <ProjectToolCard title="Chat" icon="💬" isEnabled={tools.chat} onToggle={() => toggleTool("chat")} description="Chat casually with the group." />
             <ProjectToolCard title="Schedule" icon="📅" isEnabled={tools.schedule} onToggle={() => toggleTool("schedule")} description="Set important dates on a shared schedule." />
             <ProjectToolCard title="Card Table" icon="🗂️" isEnabled={tools.cardTable} onToggle={() => toggleTool("cardTable")} description="A visual, kanban-like tool for workflows." />
           </div>
-        </div>
+        </section>
 
         {/* People */}
-        <div style={{ marginBottom: "2rem", background: "#1c2331", padding: "1.5rem", borderRadius: "8px" }}>
-          <h2 style={{ fontSize: "1.25rem", fontWeight: "600", marginBottom: "1rem" }}>3. Choose who's on the project</h2>
-          {loading ? (
-            <p>Loading users...</p>
-          ) : error ? (
-            <p>Error loading users: {error}</p>
-          ) : (
-            <div className="space-y-3">
-              {users.map((user) => (
-                <ProjectUserRow
+        <section className="bg-[#1c2331] p-6 rounded-xl">
+          <h2 className="text-xl font-semibold mb-4">3. Choose who's on the project</h2>
+
+          <input
+            type="text"
+            placeholder="Search users by name..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full p-2 mb-4 bg-[#2c323f] border border-[#3a404e] text-white rounded-md"
+          />
+
+          {/* Matching Users */}
+          {searchTerm && (
+            <div className="flex gap-4 mb-4 flex-wrap">
+              {filteredUsers.map((user) => (
+                <div
                   key={user._id}
-                  user={user}
-                  isSelected={!!selectedUsers.find((u) => u._id === user._id)}
-                  onToggle={() => toggleUserSelect(user)}
-                />
+                  onClick={() => toggleUserSelect(user)}
+                  className="flex flex-col items-center cursor-pointer hover:opacity-80"
+                >
+                  {user.avatar ? (
+                    <img
+                      src={user.avatar}
+                      alt={user.username}
+                      className="w-12 h-12 rounded-full border-2 border-green-500"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 flex items-center justify-center rounded-full bg-green-700 text-white text-lg font-semibold border-2 border-green-500">
+                      {user.username?.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <span className="text-sm mt-1">{user.username}</span>
+                </div>
               ))}
             </div>
           )}
-        </div>
 
-        <div style={{ textAlign: "center", marginTop: "2rem" }}>
+          {/* Selected Users */}
+          <div className="flex flex-wrap gap-2">
+            {selectedUsers.map((user) => (
+              <div
+                key={user._id}
+                className="flex items-center px-3 py-1 bg-[#2c323f] text-sm rounded-full"
+              >
+                {user.avatar ? (
+                  <img
+                    src={user.avatar}
+                    alt={user.username}
+                    className="w-5 h-5 rounded-full mr-2"
+                  />
+                ) : (
+                  <div className="w-5 h-5 flex items-center justify-center rounded-full bg-green-700 text-white text-xs font-bold mr-2">
+                    {user.username?.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                {user.username}
+                <button
+                  onClick={() => toggleUserSelect(user)}
+                  className="ml-2 text-red-400 hover:text-red-500"
+                >
+                  &times;
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {loading && <p className="mt-4">Loading users...</p>}
+          {error && <p className="mt-4 text-red-500">Error loading users: {error}</p>}
+        </section>
+
+        <div className="text-center mt-8">
           <button
             onClick={handleCreateProject}
-            style={{
-              padding: "0.75rem 2rem",
-              backgroundColor: "#2d9d78",
-              color: "white",
-              border: "none",
-              borderRadius: "999px",
-              cursor: "pointer",
-              fontSize: "1rem",
-            }}
+            className="px-6 py-3 bg-green-600 hover:bg-green-500 text-white rounded-full text-lg"
           >
             Create this project
           </button>

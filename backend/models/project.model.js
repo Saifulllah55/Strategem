@@ -65,6 +65,12 @@ const projectSchema = new mongoose.Schema(
         ref: "Task",
       },
     ],
+    announcements: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Announcement",
+      },
+    ],
   },
   { timestamps: true }
 );

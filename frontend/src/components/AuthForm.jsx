@@ -5,28 +5,31 @@ import { useDispatch, useSelector } from "react-redux";
 import { loginUser } from "../Store/features/userSlice";
 
 const AuthForm = ({ signUp }) => {
-  
   const [isSignup, setIsSignup] = useState(false);
-
-  let navigate = useNavigate();
-
-  const dispatch = useDispatch();
-
-  const location = useLocation();
-  const from = location.state?.from?.pathname || "/dashboard";
-
-  console.log(location.state?.from?.pathname);
-
-  useEffect(() => {
-    setIsSignup(signUp);
-  }, []);
-
   const [credentials, setCredentials] = useState({
     username: "",
     email: "",
     password: "",
   });
   const [responseMsg, setResponseMsg] = useState("");
+
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const from = location.state?.from?.pathname || "/dashboard";
+
+  const user = useSelector((state) => state.user.user);
+
+  useEffect(() => {
+    if (user) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [user, navigate]);
+
+  useEffect(() => {
+    setIsSignup(signUp);
+  }, [signUp]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -35,7 +38,6 @@ const AuthForm = ({ signUp }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const endpoint = isSignup ? "/signup" : "/login";
 
     const payload = isSignup
       ? credentials
