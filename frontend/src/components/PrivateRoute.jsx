@@ -4,7 +4,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { checkAuth } from "../Store/features/userSlice";
 
 const PrivateRoute = ({ children }) => {
-  const { user, loading } = useSelector((state) => state.user);
+  const { user, loading } = useSelector((state) => state.auth);
   const location = useLocation();
   const dispatch = useDispatch();
 
@@ -15,7 +15,11 @@ const PrivateRoute = ({ children }) => {
   }, [dispatch, user]);
 
   if (loading) {
-    return <div>Loading ... </div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#121620]">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500"></div>
+      </div>
+    );
   }
 
   return user ? (

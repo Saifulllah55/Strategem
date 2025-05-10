@@ -273,3 +273,75 @@ export const createAnnouncement = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+export const addMembers = async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { memberIds } = req.body;
+    const userId = req.user._id;
+
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return res.status(404).json({ message: "Project not found" });
+    }
+
+    // Check if the current user is the project owner
+    if (project.owner.toString() !== userId.toString()) {
+      return res.status(403).json({ message: "Only project owner can add members" });
+    }
+
+    // Get unique member IDs
+    const uniqueMemberIds = [...new Set(memberIds.map((id) => id.toString()))];
+
+    // Find all users
+    const users = await User.find({ _id: { $in: uniqueMemberIds } });
+    const foundUserIds = users.map((user) => user._id.toString());
+
+    // Check for invalid user IDs
+    const notFound = uniqueMemberIds.filter((id) => !foundUserIds.includes(id));
+    if (notFound.length > 0) {
+      return res.status(404).json({ message: `Users not found: ${notFound.join(", ")}` });
+    }
+
+    // Add new members
+    const newMembers = users.map((user) => ({
+      user: user._id,
+      role: "member",
+      joinedAt: new Date(),
+    }));
+
+    // Filter out existing members
+    const existingMemberIds = project.members.map((m) => m.user.toString());
+    const uniqueNewMembers = newMembers.filter(
+      (m) => !existingMemberIds.includes(m.user.toString())
+    );
+
+    // Update project members
+    project.members.push(...uniqueNewMembers);
+    await project.save();
+
+    // Update users' projects array
+    await User.updateMany(
+      { _id: { $in: uniqueNewMembers.map(m => m.user) } },
+      { $addToSet: { projects: projectId } }
+    );
+
+    // Create activity for adding members
+    await createActivity(
+      projectId,
+      userId,
+      "members_added",
+      `Added ${uniqueNewMembers.length} new members to the project`
+    );
+
+    const populatedProject = await Project.findById(projectId)
+      .populate("owner", "name email")
+      .populate("members.user", "name email")
+      .populate("announcements.announcer", "name email");
+
+    res.status(200).json(populatedProject);
+  } catch (error) {
+    console.error("Error adding members:", error);
+    res.status(500).json({ message: error.message });
+  }
+};

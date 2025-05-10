@@ -52,6 +52,20 @@ export const createProject = createAsyncThunk(
   }
 );
 
+export const addMembers = createAsyncThunk(
+  "projects/addMembers",
+  async ({ projectId, memberIds }, { rejectWithValue }) => {
+    try {
+      const response = await api.post(`/projects/${projectId}/members`, { memberIds });
+      return response.data;
+    } catch (err) {
+      return rejectWithValue(
+        err.response?.data?.message || "Failed to add members"
+      );
+    }
+  }
+);
+
 // Initial state
 const initialState = {
   byId: {},
@@ -67,6 +81,9 @@ const initialState = {
   createError: null,
   createSuccess: false,
   createdProject: null,
+
+  addMembersLoading: false,
+  addMembersError: null,
 };
 
 // Slice
@@ -140,6 +157,20 @@ const projectSlice = createSlice({
     builder.addCase(createProject.rejected, (state, action) => {
       state.createLoading = false;
       state.createError = action.payload;
+    });
+
+    // Add members
+    builder.addCase(addMembers.pending, (state) => {
+      state.addMembersLoading = true;
+      state.addMembersError = null;
+    });
+    builder.addCase(addMembers.fulfilled, (state, action) => {
+      state.addMembersLoading = false;
+      state.byId[action.payload._id] = action.payload;
+    });
+    builder.addCase(addMembers.rejected, (state, action) => {
+      state.addMembersLoading = false;
+      state.addMembersError = action.payload;
     });
   },
 });

@@ -1,5 +1,5 @@
 import express from "express";
-import { createProject, createTaskForProject, getProjectById, getTasksByProjectId, getUserProjects, updateTaskForProject, createAnnouncement } from "../controllers/project.controller.js";
+import { createProject, createTaskForProject, getProjectById, getTasksByProjectId, getUserProjects, updateTaskForProject, createAnnouncement, addMembers } from "../controllers/project.controller.js";
 import { protectRoute } from "../middleware/auth.middleware.js";
 
 
@@ -9,6 +9,7 @@ router.post("/create", protectRoute, createProject);
 router.get("/getall", protectRoute, getUserProjects);
 router.get("/:projectId", protectRoute, getProjectById);
 router.post("/:projectId/announcement", protectRoute, createAnnouncement);
+router.post("/:projectId/members", protectRoute, addMembers);
 
 
 

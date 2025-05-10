@@ -4,8 +4,9 @@ import { useDispatch, useSelector } from "react-redux";
 import { fetchProjectById } from "../Store/features/projectSlice";
 // import { fetchTools } from "../Store/features/toolSlice";
 // import { fetchAnnouncements } from "../Store/features/announcementSlice";
-import { fetchActivities } from "../Store/features/activitySlice";
+// import { fetchActivities } from "../Store/features/activitySlice";
 import ModalComponent from "../components/ModalComponent";
+import AddMembersModal from "../components/AddMembersModal";
 
 const ProjectPage = () => {
   const { projectId } = useParams();
@@ -13,6 +14,7 @@ const ProjectPage = () => {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalTitle, setModalTitle] = useState("");
+  const [addMembersModalOpen, setAddMembersModalOpen] = useState(false);
 
   // Project data
   const project = useSelector((state) => state.projects.byId[projectId]);
@@ -42,7 +44,7 @@ const ProjectPage = () => {
     if (project) {
       // dispatch(fetchTools(projectId));
       // dispatch(fetchAnnouncements(projectId));
-      dispatch(fetchActivities(projectId));
+      // dispatch(fetchActivities(projectId));
     }
   }, [dispatch, projectId, project]);
 
@@ -80,7 +82,10 @@ const ProjectPage = () => {
           <h1 className="text-3xl font-bold">{project.name}</h1>
           <p className="text-gray-400">{project.description}</p>
           <div className="flex justify-center gap-3 mt-4">
-            <button className="flex items-center gap-1 border border-gray-400 px-4 py-2 rounded-md hover:bg-white hover:text-black transition text-sm">
+            <button 
+              onClick={() => setAddMembersModalOpen(true)}
+              className="flex items-center gap-1 border border-gray-400 px-4 py-2 rounded-md hover:bg-white hover:text-black transition text-sm"
+            >
               👥 Add People
             </button>
             <button className="flex items-center gap-1 border border-gray-400 px-4 py-2 rounded-md hover:bg-white hover:text-black transition text-sm">
@@ -192,6 +197,14 @@ const ProjectPage = () => {
           projectId={projectId}
           title={modalTitle}
           closeModal={() => setModalOpen(false)}
+        />
+      )}
+
+      {/* Add Members Modal */}
+      {addMembersModalOpen && (
+        <AddMembersModal
+          projectId={projectId}
+          closeModal={() => setAddMembersModalOpen(false)}
         />
       )}
     </div>

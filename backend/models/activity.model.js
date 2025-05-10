@@ -13,7 +13,7 @@ const activitySchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ["task_created", "task_submitted", "task_approved", "announcement_created"],
+    enum: ["task_created", "task_submitted", "task_approved", "announcement_created", "members_added"],
     required: true
   },
   content: {

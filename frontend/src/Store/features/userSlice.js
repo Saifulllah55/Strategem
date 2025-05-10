@@ -71,12 +71,15 @@ const userSlice = createSlice({
     setUser: (state, action) => {
       state.user = action.payload;
       state.loading = false;
-      localStorage.setItem("user", JSON.stringify(state.user));
+      if (action.payload) {
+        localStorage.setItem("user", JSON.stringify(action.payload));
+      } else {
+        localStorage.removeItem("user");
+      }
     },
   },
   extraReducers: (builder) => {
     builder
-      // Check Auth
       .addCase(checkAuth.pending, (state) => {
         state.loading = true;
         state.error = null;
@@ -128,6 +131,7 @@ const userSlice = createSlice({
         state.loading = false;
         state.user = null;
         state.error = null;
+        localStorage.removeItem("user");
       })
       .addCase(logoutUser.rejected, (state, action) => {
         state.loading = false;

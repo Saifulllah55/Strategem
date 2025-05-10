@@ -10,7 +10,7 @@ const ModalComponent = ({ title, closeModal,projectId }) => {
   const renderContent = () => {
     switch (title) {
       case 'Message Board':
-        return <MessageBoard projectId={projectId} />;
+        return <Chat/>;
       case 'To-Dos':
         return <Tasks />;
       case 'Docs & Files':
