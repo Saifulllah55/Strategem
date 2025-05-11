@@ -10,6 +10,8 @@ import { setUser } from "./Store/features/userSlice";
 import LoginPage from "./pages/LoginPage";
 import ProjectPage from "./pages/ProjectPage";
 import ProjectsPage from "./pages/ProjectsPage";
+import RemindersPage from "./pages/RemindersPage";
+import ProjectAnalyticsPage from "./pages/ProjectAnalyticsPage";
 import { fetchProjects } from "./Store/features/projectSlice";
 import ModalComponent from "./components/ModalComponent";
 import Navbar from "./components/NavBar";
@@ -87,8 +89,7 @@ function App() {
               </PrivateRoute>
             </Layout>
           }
-        />
-        <Route 
+        />        <Route 
           path="/project/:projectId" 
           element={
             <Layout>
@@ -97,6 +98,25 @@ function App() {
               </PrivateRoute>
             </Layout>
           } 
+        />        <Route
+          path="/reminders"
+          element={
+            <Layout>
+              <PrivateRoute>
+                <RemindersPage />
+              </PrivateRoute>
+            </Layout>
+          }
+        />
+        <Route
+          path="/analytics"
+          element={
+            <Layout>
+              <PrivateRoute>
+                <ProjectAnalyticsPage />
+              </PrivateRoute>
+            </Layout>
+          }
         />
       </Routes>
     </BrowserRouter>

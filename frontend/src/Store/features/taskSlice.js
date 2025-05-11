@@ -1,6 +1,21 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import api from "../../lib/axios";
 
+// Async thunk to fetch all tasks across all projects
+export const fetchTasks = createAsyncThunk(
+  "tasks/fetchAll",
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await api.get('/tasks');
+      return response.data;
+    } catch (err) {
+      return rejectWithValue(
+        err.response?.data?.message || "Failed to fetch all tasks"
+      );
+    }
+  }
+);
+
 // Async thunk to fetch all tasks for a specific project
 export const fetchTasksByProjectId = createAsyncThunk(
   "tasks/fetchByProjectId",
@@ -56,6 +71,7 @@ export const updateTask = createAsyncThunk(
 const initialState = {
   byId: {},
   allIds: [],
+  tasks: [], // added for direct access to all tasks
   fetchLoading: false,
   fetchError: null,
   createLoading: false,
@@ -68,8 +84,31 @@ const initialState = {
 const taskSlice = createSlice({
   name: "tasks",
   initialState,
-  reducers: {},
-  extraReducers: (builder) => {
+  reducers: {},  extraReducers: (builder) => {
+    // Fetch all tasks
+    builder.addCase(fetchTasks.pending, (state) => {
+      state.fetchLoading = true;
+      state.fetchError = null;
+    });
+    builder.addCase(fetchTasks.fulfilled, (state, action) => {
+      state.fetchLoading = false;
+      state.tasks = action.payload;
+      
+      // Also update the normalized state
+      state.byId = {};
+      state.allIds = [];
+      action.payload.forEach((task) => {
+        state.byId[task._id] = task;
+        if (!state.allIds.includes(task._id)) {
+          state.allIds.push(task._id);
+        }
+      });
+    });
+    builder.addCase(fetchTasks.rejected, (state, action) => {
+      state.fetchLoading = false;
+      state.fetchError = action.payload;
+    });
+    
     // Fetch tasks by project ID
     builder.addCase(fetchTasksByProjectId.pending, (state) => {
       state.fetchLoading = true;

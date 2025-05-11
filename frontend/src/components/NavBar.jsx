@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { logoutUser } from '../Store/features/userSlice';
+import ReminderDropdown from './ReminderDropdown';
+import NotificationDropdown from './NotificationDropdown';
 
 export default function Navbar() {
   const dispatch = useDispatch();
@@ -17,11 +19,11 @@ export default function Navbar() {
 
   const isActive = (path) => {
     return location.pathname === path;
-  };
-
-  const navLinks = [
+  };  const navLinks = [
     { path: '/dashboard', label: 'Dashboard' },
     { path: '/projects', label: 'Projects' },
+    { path: '/analytics', label: 'Analytics' },
+    { path: '/reminders', label: 'Reminders' },
     { path: '/search', label: 'Search' },
     { path: '/about', label: 'About' },
   ];
@@ -52,16 +54,13 @@ export default function Navbar() {
                 {link.label}
               </Link>
             ))}
-          </div>
-
-          {/* Right Section */}
+          </div>          {/* Right Section */}
           <div className="flex items-center gap-4">
+            {/* Reminders Dropdown */}
+            <ReminderDropdown />
+
             {/* Notifications */}
-            <button className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] transition-colors">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
-              </svg>
-            </button>
+            <NotificationDropdown />
 
             {/* Profile Dropdown */}
             <div className="relative">

@@ -7,6 +7,7 @@ import activityReducer from "./features/activitySlice";
 import announcementReducer from "./features/announcementSlice";
 import chatReducer from "./features/chatSlice";
 import notificationsReducer from "./features/notificationSlice";
+import remindersReducer from "./features/reminderSlice";
 
 const store = configureStore({
   reducer: {
@@ -18,6 +19,7 @@ const store = configureStore({
     announcements: announcementReducer,
     chat: chatReducer,
     notifications: notificationsReducer,
+    reminders: remindersReducer,
   },
 
 });
