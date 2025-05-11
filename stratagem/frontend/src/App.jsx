@@ -8,6 +8,7 @@ import Dashboard from './components/dashboard/Dashboard';
 import Reports from './components/reports/Reports';
 import TaskReminders from './components/reminders/TaskReminders';
 import CustomReminders from './components/reminders/CustomReminders';
+import ProjectDetails from './components/projects/ProjectDetails';
 import './App.css';
 
 function App() {
@@ -22,6 +23,7 @@ function App() {
                 <Route index element={<Navigate to="/dashboard" replace />} />
                 <Route path="dashboard" element={<Dashboard />} />
                 <Route path="tasks" element={<div>Tasks Page (Coming Soon)</div>} />
+                <Route path="project/:id" element={<ProjectDetails />} />
                 <Route path="reports" element={<Reports />} />
                 <Route path="reminders" element={<TaskReminders />} />
                 <Route path="custom-reminders" element={<CustomReminders />} />

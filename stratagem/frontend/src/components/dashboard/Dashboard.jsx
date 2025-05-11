@@ -125,6 +125,11 @@ const Dashboard = () => {
     navigate(`/reports?project=${projectId}`);
   };
 
+  // Add a new handler function to open project details in a new window
+  const handleViewProjectDetails = (projectId) => {
+    window.open(`/project/${projectId}`, '_blank');
+  };
+
   return (
     <Box>
       <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
