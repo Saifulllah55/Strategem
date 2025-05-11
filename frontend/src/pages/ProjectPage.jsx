@@ -1,11 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchProjectById } from "../Store/features/projectSlice";
 import { fetchProjectActivities } from "../Store/features/activitySlice";
-// import { fetchTools } from "../Store/features/toolSlice";
-// import { fetchAnnouncements } from "../Store/features/announcementSlice";
-// import { fetchActivities } from "../Store/features/activitySlice";
+import { createSelector } from "@reduxjs/toolkit";
 import ModalComponent from "../components/ModalComponent";
 import AddMembersModal from "../components/AddMembersModal";
 import NotificationDropdown from "../components/NotificationDropdown";
@@ -19,59 +17,131 @@ const ProjectPage = () => {
   const [addMembersModalOpen, setAddMembersModalOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
 
-  // Project data
-  const project = useSelector((state) => state.projects.byId[projectId]);
-  const projectLoading = useSelector((state) => state.projects.fetchSingleLoading);
-  const projectError = useSelector((state) => state.projects.fetchSingleError);
+  const { user } = useSelector((state) => state.auth);
 
-  // Tools data
-  const tools = useSelector((state) => state.tools?.items || []);
-  const toolsLoading = useSelector((state) => state.tools?.loading || false);
-  const toolsError = useSelector((state) => state.tools?.error || null);
+  // Memoized selectors
+  const selectProject = useMemo(
+    () =>
+      createSelector(
+        [(state) => state.projects.byId],
+        (byId) => byId[projectId]
+      ),
+    [projectId]
+  );
 
+  const selectProjectLoading = useMemo(
+    () =>
+      createSelector(
+        [(state) => state.projects],
+        (projects) => projects.fetchSingleLoading
+      ),
+    []
+  );
 
-  // Activities data
-  const activities = useSelector((state) => Object.values(state.activities.byId));
-  const activitiesLoading = useSelector((state) => state.activities.fetchLoading);
-  const activitiesError = useSelector((state) => state.activities.fetchError);
+  const selectProjectError = useMemo(
+    () =>
+      createSelector(
+        [(state) => state.projects],
+        (projects) => projects.fetchSingleError
+      ),
+    []
+  );
+
+  const selectActivities = useMemo(
+    () =>
+      createSelector(
+        [(state) => state.activities.byId],
+        (byId) => Object.values(byId)
+      ),
+    []
+  );
+
+  const selectActivitiesLoading = useMemo(
+    () =>
+      createSelector(
+        [(state) => state.activities],
+        (activities) => activities.fetchLoading
+      ),
+    []
+  );
+
+  const selectActivitiesError = useMemo(
+    () =>
+      createSelector(
+        [(state) => state.activities],
+        (activities) => activities.fetchError
+      ),
+    []
+  );
+
+  // Use selectors
+  const project = useSelector(selectProject);
+  const projectLoading = useSelector(selectProjectLoading);
+  const projectError = useSelector(selectProjectError);
+  const activities = useSelector(selectActivities);
+  const activitiesLoading = useSelector(selectActivitiesLoading);
+  const activitiesError = useSelector(selectActivitiesError);
 
   useEffect(() => {
     dispatch(fetchProjectById(projectId));
     dispatch(fetchProjectActivities(projectId));
   }, [dispatch, projectId]);
 
-  useEffect(() => {
-    if (project) {
-      // dispatch(fetchTools(projectId));
-      // dispatch(fetchActivities(projectId));
-    }
-  }, [dispatch, projectId, project]);
-
-  const formatToolName = (key) => {
-    const nameMap = {
-      messageBoard: "Message Board",
-      tasks: "Tasks",
-      docsFiles: "Docs & Files",
-      chat: "Chat",
-      schedule: "Schedule",
-    };
-    return nameMap[key] || key;
+  const toolMeta = {
+    messageBoard: {
+      title: "Message Board",
+      icon: "📝",
+      iconBg: "bg-blue-500",
+      desc: "Post announcements, pitch ideas, and keep discussions on-topic.",
+      action: "Write a message",
+    },
+    todos: {
+      title: "To-dos",
+      icon: "✅",
+      iconBg: "bg-green-500",
+      desc: "Organize work across teams. Assign tasks, set due dates, and discuss.",
+      action: "Make a to-do list",
+    },
+    docsFiles: {
+      title: "Docs & Files",
+      icon: "📁",
+      iconBg: "bg-yellow-700",
+      desc: "Share and organize docs, spreadsheets, images, and other files.",
+      action: "Add docs & files",
+    },
+    chat: {
+      title: "Chat",
+      icon: "💬",
+      iconBg: "bg-cyan-600",
+      desc: "Chat with your team in real time and keep everyone in sync.",
+      action: "Open chat",
+    },
+    schedule: {
+      title: "Schedule",
+      icon: "📅",
+      iconBg: "bg-pink-500",
+      desc: "Set important dates on a shared schedule and subscribe to events.",
+      action: "Schedule an event",
+    },
+    cardTable: {
+      title: "Card Table",
+      icon: "🃏",
+      iconBg: "bg-purple-600",
+      desc: "Organize and manage cards for tasks, ideas, or workflows.",
+      action: "Open card table",
+    },
   };
 
-  const getToolIcon = (key) => {
-    const iconMap = {
-      messageBoard: "📝",
-      tasks: "✅",
-      docsFiles: "📄",
-      chat: "💬",
-      schedule: "📅",
-    };
-    return iconMap[key] || "🔧";
-  };
-
-  if (projectLoading) return <p className="text-center text-white mt-10">Loading project...</p>;
-  if (projectError) return <p className="text-center text-red-400 mt-10">Error: {projectError}</p>;
-  if (!project && !projectLoading) return <p className="text-center text-white mt-10">Project not found.</p>;
+  if (projectLoading)
+    return <p className="text-center text-white mt-10">Loading project...</p>;
+  if (projectError)
+    return (
+      <p className="text-center text-red-400 mt-10">Error: {projectError}</p>
+    );
+  if (!project && !projectLoading)
+    return (
+      <p className="text-center text-white mt-10">Project not found.</p>
+    );
 
   return (
     <div className="min-h-screen bg-[#121620] text-white px-4 py-8 overflow-x-hidden">
@@ -88,7 +158,6 @@ const ProjectPage = () => {
               👥 Add People
             </button>
             <NotificationDropdown />
-
           </div>
         </header>
 
@@ -97,57 +166,13 @@ const ProjectPage = () => {
           <div className="flex flex-wrap justify-center bg-[#1c2331] rounded-xl shadow-lg w-full max-w-5xl mx-auto">
             {Object.entries(project.tools || {})
               .filter(([_, enabled]) => enabled)
-              .map(([toolKey], idx) => {
-                const toolMeta = {
-                  messageBoard: {
-                    title: 'Message Board',
-                    icon: '📝',
-                    iconBg: 'bg-blue-500',
-                    desc: 'Post announcements, pitch ideas, and keep discussions on-topic.',
-                    action: 'Write a message',
-                  },
-                  todos: {
-                    title: 'To-dos',
-                    icon: '✅',
-                    iconBg: 'bg-green-500',
-                    desc: 'Organize work across teams. Assign tasks, set due dates, and discuss.',
-                    action: 'Make a to-do list',
-                  },
-                  docsFiles: {
-                    title: 'Docs & Files',
-                    icon: '📁',
-                    iconBg: 'bg-yellow-700',
-                    desc: 'Share and organize docs, spreadsheets, images, and other files.',
-                    action: 'Add docs & files',
-                  },
-                  chat: {
-                    title: 'Chat',
-                    icon: '💬',
-                    iconBg: 'bg-cyan-600',
-                    desc: 'Chat with your team in real time and keep everyone in sync.',
-                    action: 'Open chat',
-                  },
-                  schedule: {
-                    title: 'Schedule',
-                    icon: '📅',
-                    iconBg: 'bg-pink-500',
-                    desc: 'Set important dates on a shared schedule and subscribe to events.',
-                    action: 'Schedule an event',
-                  },
-                  cardTable: {
-                    title: 'Card Table',
-                    icon: '🃏',
-                    iconBg: 'bg-purple-600',
-                    desc: 'Organize and manage cards for tasks, ideas, or workflows.',
-                    action: 'Open card table',
-                  },
-                };
+              .map(([toolKey]) => {
                 const tool = toolMeta[toolKey] || {
                   title: toolKey,
-                  icon: '🔧',
-                  iconBg: 'bg-gray-500',
-                  desc: '',
-                  action: 'Open',
+                  icon: "🔧",
+                  iconBg: "bg-gray-500",
+                  desc: "",
+                  action: "Open",
                 };
                 return (
                   <div
@@ -160,8 +185,12 @@ const ProjectPage = () => {
                   >
                     <div className="flex flex-col items-center justify-center p-6 h-full shadow-inner">
                       <div className="text-4xl mb-3">{tool.icon}</div>
-                      <h3 className="text-lg font-bold mb-1 text-center">{tool.title}</h3>
-                      <p className="text-gray-300 text-center mb-4 text-xs">{tool.desc}</p>
+                      <h3 className="text-lg font-bold mb-1 text-center">
+                        {tool.title}
+                      </h3>
+                      <p className="text-gray-300 text-center mb-4 text-xs">
+                        {tool.desc}
+                      </p>
                       <button className="px-3 py-1 rounded-full text-xs text-gray-200 hover:bg-white hover:text-black transition">
                         {tool.action}
                       </button>
@@ -172,37 +201,64 @@ const ProjectPage = () => {
           </div>
         </section>
 
-
-
+        {/* Activities Timeline */}
         <section className="bg-[#1c2331] rounded-xl p-6">
           <h2 className="text-xl font-semibold mb-4">Project Activity</h2>
           {activitiesLoading ? (
             <p className="text-center text-gray-400">Loading activities...</p>
           ) : activitiesError ? (
-            <p className="text-center text-red-400">Error loading activities: {activitiesError}</p>
+            <p className="text-center text-red-400">
+              Error loading activities: {activitiesError}
+            </p>
           ) : activities.length === 0 ? (
             <p className="text-center text-gray-400">No activities yet.</p>
           ) : (
             <div className="relative">
               <div className="absolute left-1/2 w-0.5 h-full bg-[#3a404e] transform -translate-x-1/2"></div>
               <div className="space-y-6">
-                {activities.map((activity) => (
-                  <div key={activity._id} className="flex justify-start">
-                    <div className="w-1/2 pr-8">
-                      <div className="bg-[#2c323f] p-4 rounded-md relative">
-                        <div className="absolute left-0 top-1/2 transform -translate-x-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[#3a404e] border-2 border-[#1c2331]"></div>
-                        <div className="flex flex-col">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-sm font-medium">{activity.user?.username || "Unknown"}</span>
-                            <span className="text-xs text-gray-400">•</span>
-                            <span className="text-xs text-gray-400">{new Date(activity.createdAt).toLocaleString()}</span>
+                {activities.map((activity) => {
+                  const isOwnActivity =
+                    activity.user?._id === user?._id;
+
+                  return (
+                    <div
+                      key={activity._id}
+                      className={`flex ${
+                        isOwnActivity ? "justify-end" : "justify-start"
+                      }`}
+                    >
+                      <div className="w-1/2 px-4">
+                        <div className="bg-[#2c323f] p-4 rounded-md relative">
+                          <div
+                            className={`absolute ${
+                              isOwnActivity ? "right-0" : "left-0"
+                            } top-1/2 transform ${
+                              isOwnActivity
+                                ? "translate-x-1/2"
+                                : "-translate-x-1/2"
+                            } -translate-y-1/2 w-3 h-3 rounded-full bg-[#3a404e] border-2 border-[#1c2331]`}
+                          ></div>
+                          <div className="flex flex-col text-left">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-sm font-medium">
+                                {activity.user?.username || "Unknown"}
+                              </span>
+                              <span className="text-xs text-gray-400">•</span>
+                              <span className="text-xs text-gray-400">
+                                {new Date(
+                                  activity.createdAt
+                                ).toLocaleString()}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-300">
+                              {activity.content}
+                            </p>
                           </div>
-                          <p className="text-sm text-gray-300">{activity.content}</p>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

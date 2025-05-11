@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { useParams } from "react-router-dom";
 import { io } from "socket.io-client";
 import { getProjectMessages, sendMessage, addMessage } from "../../Store/features/chatSlice";
-import { format } from "date-fns";
+import { format, isToday, isYesterday } from "date-fns";
 
 const Chat = () => {
   const [message, setMessage] = useState("");
@@ -44,18 +44,13 @@ const Chat = () => {
     }
   };
 
-  // Helper to check if message is from today
-  const isToday = (date) => {
-    const today = new Date();
-    return (
-      date.getDate() === today.getDate() &&
-      date.getMonth() === today.getMonth() &&
-      date.getFullYear() === today.getFullYear()
-    );
+  const getDateLabel = (date) => {
+    if (isToday(date)) return "Today";
+    if (isYesterday(date)) return "Yesterday";
+    return format(date, "MMM dd, yyyy");
   };
 
-  // Group messages by date for divider
-  let lastDate = null;
+  let lastLabel = null;
 
   if (loading) {
     return (
@@ -76,27 +71,33 @@ const Chat = () => {
   return (
     <div className="flex flex-col h-full bg-[#121620]">
       <div className="flex-1 overflow-y-auto px-0 pt-6 pb-2">
-        {messages.map((msg, idx) => {
+        {messages.map((msg) => {
           const msgDate = new Date(msg.createdAt);
-          let showDivider = false;
-          if (!lastDate || !isToday(lastDate) && isToday(msgDate)) {
-            showDivider = true;
-            lastDate = msgDate;
-          }
+          const dateLabel = getDateLabel(msgDate);
+          const showDivider = dateLabel !== lastLabel;
+          if (showDivider) lastLabel = dateLabel;
+
           return (
             <React.Fragment key={msg._id}>
               {showDivider && (
                 <div className="flex justify-center my-4">
                   <span className="bg-[#22313c] text-gray-300 text-xs px-4 py-1 rounded-full font-semibold tracking-wide shadow-sm">
-                    TODAY
+                    {dateLabel.toUpperCase()}
                   </span>
                 </div>
               )}
               <div className={`flex w-full mb-2 ${msg.sender._id === user._id ? "justify-end" : "justify-start"}`}>
+                {msg.sender._id !== user._id && (
+                  <div className="mr-2 flex items-end">
+                    <div className="w-8 h-8 rounded-full bg-[#22313c] flex items-center justify-center text-white font-bold text-lg">
+                      {msg.sender.username.charAt(0).toUpperCase()}
+                    </div>
+                  </div>
+                )}
                 <div className={`max-w-[70%] rounded-xl px-4 py-2 ${msg.sender._id === user._id ? "bg-[#22313c] text-white" : "bg-[#1c2331] text-white"} shadow-sm relative`}>
                   <div className="flex items-center gap-2 mb-1">
                     {msg.sender._id !== user._id && (
-                      <span className="text-xs font-medium text-green-400">{msg.sender.name}</span>
+                      <span className="text-xs font-medium text-green-400">{msg.sender.username}</span>
                     )}
                     <span className="text-[10px] text-gray-400 font-mono">
                       {format(new Date(msg.createdAt), "h:mm a")}
@@ -112,7 +113,7 @@ const Chat = () => {
                 {msg.sender._id === user._id && (
                   <div className="ml-2 flex items-end">
                     <div className="w-8 h-8 rounded-full bg-[#f25c5c] flex items-center justify-center text-white font-bold text-lg">
-                      S
+                      {user.username.charAt(0).toUpperCase()}
                     </div>
                   </div>
                 )}
@@ -124,8 +125,6 @@ const Chat = () => {
       </div>
       <form onSubmit={handleSubmit} className="px-4 pb-6 pt-2">
         <div className="flex items-center bg-[#1c2331] rounded-2xl px-4 py-2 gap-2">
-          <button type="button" className="text-gray-400 text-xl hover:text-green-400"><span role="img" aria-label="format">A</span></button>
-          <button type="button" className="text-gray-400 text-xl hover:text-green-400"><span role="img" aria-label="emoji">😊</span></button>
           <input
             type="text"
             value={message}
@@ -133,7 +132,6 @@ const Chat = () => {
             placeholder="Type a message..."
             className="flex-1 bg-transparent text-white placeholder-gray-400 focus:outline-none px-2"
           />
-          <button type="button" className="text-gray-400 text-xl hover:text-green-400"><span role="img" aria-label="attach">📎</span></button>
           <button
             type="submit"
             className="bg-green-600 text-white px-4 py-1 rounded-xl ml-2 font-semibold hover:bg-green-700 transition-colors"
@@ -146,4 +144,4 @@ const Chat = () => {
   );
 };
 
-export default Chat; 
+export default Chat;

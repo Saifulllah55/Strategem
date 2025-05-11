@@ -35,16 +35,48 @@ function TaskCard({ task }) {
     }),
   });
 
+  const formatDate = (dateString) => {
+    if (!dateString) return 'No due date';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric',
+      year: 'numeric'
+    });
+  };
+
   return (
     <div
       ref={drag}
-      className="bg-[#2c323f] p-3 rounded-md text-white shadow-sm"
+      className="bg-[#2c323f] p-3 rounded-md text-white shadow-sm hover:shadow-md transition-shadow"
       style={{ opacity: isDragging ? 0.5 : 1, cursor: "grab" }}
     >
-      <h3 className="font-medium">{task.title}</h3>
+      <h3 className="font-medium mb-2">{task.title}</h3>
       {task.description && (
-        <p className="text-sm text-gray-400">{task.description}</p>
+        <p className="text-sm text-gray-400 mb-3 line-clamp-2">{task.description}</p>
       )}
+      <div className="flex items-center justify-between text-xs">
+        <div className="flex items-center gap-2">
+          {task.assignee ? (
+            <div className="flex items-center gap-1">
+              <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center">
+                {task.assignee.username?.[0]?.toUpperCase() || '?'}
+              </div>
+              <span className="text-gray-300">{task.assignee.username}</span>
+            </div>
+          ) : (
+            <span className="text-gray-400">Unassigned</span>
+          )}
+        </div>
+        <div className="flex items-center gap-1">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          <span className={`${new Date(task.dueDate) < new Date() ? 'text-red-400' : 'text-gray-400'}`}>
+            {formatDate(task.dueDate)}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -142,6 +174,21 @@ const Task = ({ projectId }) => {
   return (
     <DndProvider backend={HTML5Backend}>
       <div className="p-6 overflow-x-auto relative bg-[#121620] min-h-screen">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-xl font-semibold text-white">Task Board</h1>
+          <button
+            tabIndex={0}
+            aria-label="Create new task"
+            onClick={() => setModalOpen(true)}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md shadow-lg flex items-center gap-2 transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+            </svg>
+            Create Task
+          </button>
+        </div>
+
         <div className="flex gap-4 min-w-[1200px]">
           {statusCategories.map((category) => (
             <TaskColumn
@@ -152,15 +199,6 @@ const Task = ({ projectId }) => {
             />
           ))}
         </div>
-
-        <button
-          tabIndex={0}
-          aria-label="Create new task"
-          onClick={() => setModalOpen(true)}
-          className="fixed bottom-4 right-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md shadow-lg"
-        >
-          ➕ Create Task
-        </button>
 
         {/* Modal */}
         {modalOpen && (

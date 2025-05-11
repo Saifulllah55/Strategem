@@ -7,7 +7,7 @@ export const getProjectMessages = async (req, res) => {
     const { projectId } = req.params;
     
     const messages = await Chat.find({ project: projectId })
-      .populate("sender", "name email")
+      .populate("sender", "username email")
       .sort({ createdAt: 1 });
 
     res.status(200).json(messages);
@@ -44,7 +44,7 @@ export const createMessage = async (req, res) => {
     await message.save();
 
     const populatedMessage = await Chat.findById(message._id)
-      .populate("sender", "name email");
+      .populate("sender", "username email");
 
     // Emit the new message to all connected clients in the project room
     req.app.get("io").to(projectId).emit("newMessage", populatedMessage);

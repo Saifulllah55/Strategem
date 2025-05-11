@@ -1,7 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import HomeNav from "../components/HomeNav";
-import logo from "../assets/logo.png";
 
 function HomePage() {
   return (
