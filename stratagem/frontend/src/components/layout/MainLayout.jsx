@@ -26,7 +26,8 @@ import {
   DashboardOutlined,
   AccountCircle,
   EmailOutlined,
-  NotificationsOutlined
+  NotificationsOutlined,
+  NotificationsActiveOutlined
 } from '@mui/icons-material';
 import NotificationPopup from './NotificationPopup';
 import { useApp } from '../../context/AppContext';
@@ -73,7 +74,8 @@ const MainLayout = () => {
     { text: 'Dashboard', icon: <DashboardOutlined />, path: '/dashboard' },
     { text: 'Manage Tasks', icon: <AssignmentOutlined />, path: '/tasks' },
     { text: 'Generate Report', icon: <BarChartOutlined />, path: '/reports' },
-    { text: 'Reminders', icon: <EmailOutlined />, path: '/reminders' },
+    { text: 'Task Reminders', icon: <EmailOutlined />, path: '/reminders' },
+    { text: 'Custom Reminders', icon: <NotificationsActiveOutlined />, path: '/custom-reminders' },
     { text: 'Share Project', icon: <ShareOutlined />, path: '/share' },
   ];
 

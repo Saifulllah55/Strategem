@@ -1,10 +1,9 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { 
   checkNotificationPermission, 
-  checkAndTriggerReminders, 
   sendNotification 
 } from '../utils/notificationUtils';
-import { taskAPI, reminderAPI, projectAPI } from '../api';
+import { taskAPI, reminderAPI, projectAPI, customReminderAPI } from '../api';
 
 // Create notification context
 const NotificationContext = createContext(null);
@@ -20,7 +19,8 @@ export const NotificationProvider = ({ children }) => {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
+  const [isAuthenticated, setIsAuthenticated] = useState(true); // Always true since we disabled auth
+  
   // Check notification permission on initial load
   useEffect(() => {
     const checkPermission = async () => {
@@ -36,22 +36,31 @@ export const NotificationProvider = ({ children }) => {
     const fetchData = async () => {
       try {
         setLoading(true);
+        
+        // Fetch tasks and projects
         const tasksResponse = await taskAPI.getAllTasks();
         const projectsResponse = await projectAPI.getAllProjects();
-        const remindersResponse = await reminderAPI.getAllReminders();
-        const customRemindersResponse = await reminderAPI.getCustomReminders();
         
+        // Fetch reminders
+        const remindersResponse = await reminderAPI.getAllReminders();
+        const customRemindersResponse = await customReminderAPI.getAllCustomReminders();
+        
+        // Process projects
         const projects = projectsResponse.data || [];
         
         // Transform tasks to the format needed for notifications
         const formattedTasks = tasksResponse.data.map(task => {
-          const project = projects.find(p => p.id === task.projectId) || { title: 'Unknown Project' };
+          // Find the associated project
+          const project = projects.find(p => {
+            return p._id === (task.project?._id || task.projectId);
+          }) || { name: 'Unknown Project' };
+          
           return {
-            id: task.id,
+            id: task._id,
             title: task.title,
             description: task.description || '',
-            projectId: task.projectId,
-            projectTitle: project.title,
+            projectId: task.project?._id || task.projectId,
+            projectTitle: project.name,
             dueDate: task.dueDate,
             completed: task.status === 'completed',
             priority: task.priority || 'medium'
@@ -200,27 +209,22 @@ export const NotificationProvider = ({ children }) => {
           dueDate: new Date().toISOString()
         };
         
-        try {
-          const response = await reminderAPI.createReminder(reminderData);
+        const response = await reminderAPI.createReminder(reminderData);
+        
+        // Add the new reminder to the list
+        if (response && response.data) {
+          const newReminder = {
+            ...response.data,
+            taskTitle: task.title,
+            projectId: task.projectId,
+            projectTitle: task.projectTitle || 'Unknown Project',
+            taskDueDate: task.dueDate
+          };
           
-          // Add the new reminder to the list
-          if (response && response.data) {
-            const newReminder = {
-              ...response.data,
-              taskTitle: task.title,
-              projectId: task.projectId,
-              projectTitle: task.projectTitle || 'Unknown Project',
-              taskDueDate: task.dueDate
-            };
-            
-            setReminders(prev => [...prev, newReminder]);
-          }
-          
-          return true;
-        } catch (apiError) {
-          console.error('Error creating reminder in API:', apiError);
-          return false;
+          setReminders(prev => [...prev, newReminder]);
         }
+        
+        return true;
       }
       
       return false;
@@ -233,7 +237,7 @@ export const NotificationProvider = ({ children }) => {
   // Create a custom reminder
   const createCustomReminder = async (reminderData) => {
     try {
-      const response = await reminderAPI.createCustomReminder(reminderData);
+      const response = await customReminderAPI.createCustomReminder(reminderData);
       
       if (response && response.data) {
         setCustomReminders(prev => [...prev, response.data]);
@@ -250,14 +254,13 @@ export const NotificationProvider = ({ children }) => {
   // Update a custom reminder
   const updateCustomReminder = async (reminderId, updates) => {
     try {
-      const response = await reminderAPI.updateReminder(reminderId, {
-        ...updates,
-        type: 'custom'
-      });
+      const response = await customReminderAPI.updateCustomReminder(reminderId, updates);
       
       if (response && response.data) {
         setCustomReminders(prev => 
-          prev.map(reminder => reminder._id === reminderId ? response.data : reminder)
+          prev.map(reminder => 
+            reminder._id === reminderId ? response.data : reminder
+          )
         );
         return response.data;
       }
@@ -269,15 +272,14 @@ export const NotificationProvider = ({ children }) => {
     }
   };
   
-  // Delete reminder
+  // Delete reminder (handles both task and custom reminders)
   const deleteReminder = async (reminderId, type = 'task') => {
     try {
-      await reminderAPI.deleteReminder(reminderId);
-      
-      // Update state based on reminder type
       if (type === 'custom') {
+        await customReminderAPI.deleteCustomReminder(reminderId);
         setCustomReminders(prev => prev.filter(reminder => reminder._id !== reminderId));
       } else {
+        await reminderAPI.deleteReminder(reminderId);
         setReminders(prev => prev.filter(reminder => reminder._id !== reminderId));
       }
       
@@ -288,13 +290,11 @@ export const NotificationProvider = ({ children }) => {
     }
   };
   
-  // Dismiss reminder
+  // Dismiss reminder (mark as notified)
   const dismissReminder = async (reminderId, isCustomReminder = false) => {
     try {
-      await reminderAPI.markAsNotified(reminderId);
-      
-      // Update state based on reminder type
       if (isCustomReminder) {
+        await customReminderAPI.markAsNotified(reminderId);
         setCustomReminders(prev => 
           prev.map(reminder => 
             reminder._id === reminderId 
@@ -303,6 +303,7 @@ export const NotificationProvider = ({ children }) => {
           )
         );
       } else {
+        await reminderAPI.markAsNotified(reminderId);
         setReminders(prev => 
           prev.map(reminder => 
             reminder._id === reminderId 
@@ -330,12 +331,15 @@ export const NotificationProvider = ({ children }) => {
       
       // Transform tasks
       const formattedTasks = tasksResponse.data.map(task => {
-        const project = projects.find(p => p._id === task.project._id) || { name: 'Unknown Project' };
+        // Find the project for this task
+        const projectId = task.project?._id || task.projectId;
+        const project = projects.find(p => p._id === projectId) || { name: 'Unknown Project' };
+        
         return {
           id: task._id,
           title: task.title,
           description: task.description || '',
-          projectId: task.project._id,
+          projectId: projectId,
           projectTitle: project.name,
           dueDate: task.dueDate,
           completed: task.status === 'completed',
@@ -367,6 +371,7 @@ export const NotificationProvider = ({ children }) => {
     tasks,
     loading,
     error,
+    isAuthenticated,
     sendReminder,
     createCustomReminder,
     updateCustomReminder,

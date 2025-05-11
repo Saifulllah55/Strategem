@@ -121,7 +121,7 @@ const Reports = () => {
     
     fetchData();
   }, []);
-  
+
   // Process tasks for timeline visualization
   const processTasksForTimeline = (projects) => {
     // Get all task dates (creation dates)
@@ -359,8 +359,8 @@ const Reports = () => {
           PROJECT REPORTS
         </Typography>
         <Box>
-          <Button 
-            startIcon={<RefreshIcon />} 
+        <Button 
+          startIcon={<RefreshIcon />}
             onClick={() => window.location.reload()}
             sx={{ 
               color: 'white',
@@ -371,7 +371,7 @@ const Reports = () => {
             }}
           >
             Refresh
-          </Button>
+        </Button>
         </Box>
       </Box>
 
@@ -426,11 +426,11 @@ const Reports = () => {
                     }}>
                       <CardContent sx={{ p: 3, flex: 1, display: 'flex', flexDirection: 'column' }}>
                         <Typography variant="h6" sx={{ mb: 2, color: 'white', fontWeight: '500', letterSpacing: 0.5, paddingBottom: 1, borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                          Project Progress Overview
-                        </Typography>
+                        Project Progress Overview
+                      </Typography>
                         <Box sx={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '450px' }}>
-                          {projectData.length > 0 ? (
-                            <Bar 
+                        {projectData.length > 0 ? (
+                          <Bar 
                               data={{
                                 labels: projectData.map(project => project.name),
                                 datasets: [
@@ -443,13 +443,13 @@ const Reports = () => {
                                   }
                                 ]
                               }}
-                              options={{
-                                responsive: true,
-                                maintainAspectRatio: false,
-                                plugins: {
-                                  legend: {
-                                    position: 'top',
-                                  },
+                            options={{
+                              responsive: true,
+                              maintainAspectRatio: false,
+                              plugins: {
+                                legend: {
+                                  position: 'top',
+                                },
                                   tooltip: {
                                     callbacks: {
                                       label: function(context) {
@@ -457,10 +457,10 @@ const Reports = () => {
                                       }
                                     }
                                   }
-                                },
-                                scales: {
-                                  y: {
-                                    beginAtZero: true,
+                              },
+                              scales: {
+                                y: {
+                                  beginAtZero: true,
                                     max: 100,
                                     title: {
                                       display: true,
@@ -475,22 +475,22 @@ const Reports = () => {
                                 },
                                 animation: {
                                   duration: 1500
-                                }
-                              }}
-                            />
-                          ) : (
-                            <Box sx={{ height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                              }
+                            }}
+                          />
+                        ) : (
+                          <Box sx={{ height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                               <Typography variant="body1" color="rgba(255,255,255,0.7)">
                                 No project data available.
-                              </Typography>
-                            </Box>
-                          )}
-                        </Box>
-                      </CardContent>
-                    </Card>
-                  </Grid>
+                            </Typography>
+                          </Box>
+                        )}
+                      </Box>
+                    </CardContent>
+                  </Card>
+                </Grid>
 
-                  {/* Task Distribution Pie Chart */}
+                {/* Task Distribution Pie Chart */}
                   <Grid item xs={12} md={6} sx={{ display: 'flex', height: '100%' }}>
                     <Card sx={{ 
                       borderRadius: 2, 
@@ -502,11 +502,11 @@ const Reports = () => {
                     }}>
                       <CardContent sx={{ p: 3, flex: 1, display: 'flex', flexDirection: 'column' }}>
                         <Typography variant="h6" sx={{ mb: 2, color: 'white', fontWeight: '500', letterSpacing: 0.5, paddingBottom: 1, borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                          Task Distribution
-                        </Typography>
+                        Task Distribution
+                      </Typography>
                         <Box sx={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '450px' }}>
                           {projectData.length > 0 && projectData.some(p => p.tasks && p.tasks.length > 0) ? (
-                            <Doughnut 
+                          <Doughnut 
                               data={{
                                 labels: ['Completed', 'In Progress', 'Not Started'],
                                 datasets: [
@@ -530,13 +530,13 @@ const Reports = () => {
                                   }
                                 ]
                               }}
-                              options={{
-                                responsive: true,
-                                maintainAspectRatio: false,
-                                plugins: {
-                                  legend: {
-                                    position: 'top',
-                                  },
+                            options={{
+                              responsive: true,
+                              maintainAspectRatio: false,
+                              plugins: {
+                                legend: {
+                                  position: 'top',
+                                },
                                   tooltip: {
                                     callbacks: {
                                       label: function(context) {
@@ -551,17 +551,17 @@ const Reports = () => {
                                 animation: {
                                   duration: 1500
                                 }
-                              }}
-                            />
-                          ) : (
+                            }}
+                          />
+                        ) : (
                             <Typography variant="body1" color="rgba(255,255,255,0.7)">
-                              No task data available.
-                            </Typography>
-                          )}
-                        </Box>
-                      </CardContent>
-                    </Card>
-                  </Grid>
+                            No task data available.
+                          </Typography>
+                        )}
+                      </Box>
+                    </CardContent>
+                  </Card>
+                </Grid>
                 </Grid>
               </Box>
             </Box>
@@ -656,7 +656,7 @@ const Reports = () => {
                                     {project.name}
                                   </Typography>
                                 </TableCell>
-                                <TableCell>
+                              <TableCell>
                                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
                                     <Box sx={{ 
                                       width: 50, 
@@ -674,8 +674,8 @@ const Reports = () => {
                                       </Typography>
                                     </Box>
                                   </Box>
-                                </TableCell>
-                                <TableCell>{formatDate(project.createdAt)}</TableCell>
+                              </TableCell>
+                              <TableCell>{formatDate(project.createdAt)}</TableCell>
                                 <TableCell>
                                   {project.dueDate ? formatDate(project.dueDate) : 'Not set'}
                                 </TableCell>
@@ -723,20 +723,20 @@ const Reports = () => {
                                     </Typography>
                                   </Box>
                                 </TableCell>
-                                <TableCell align="center">
-                                  <Tooltip title="Download PDF Report">
-                                    <IconButton 
+                              <TableCell align="center">
+                                <Tooltip title="Download PDF Report">
+                                  <IconButton 
                                       sx={{ 
                                         color: 'white',
                                         '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' }
                                       }} 
                                       onClick={() => generateProjectPDF(project)}
-                                    >
-                                      <DownloadIcon />
-                                    </IconButton>
-                                  </Tooltip>
-                                </TableCell>
-                              </TableRow>
+                                  >
+                                    <DownloadIcon />
+                                  </IconButton>
+                                </Tooltip>
+                              </TableCell>
+                            </TableRow>
                             );
                           })}
                         </TableBody>

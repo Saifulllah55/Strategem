@@ -9,22 +9,26 @@ import {
   DialogActions,
   Typography,
   Alert,
-  Divider,
   InputAdornment
 } from '@mui/material';
 import { 
   Notifications as NotificationsIcon,
   Event as EventIcon
 } from '@mui/icons-material';
-import { reminderAPI } from '../../api';
+import { customReminderAPI } from '../../api';
 
 const CustomReminderForm = ({ open, onClose, onSuccess, editReminder = null }) => {
   const isEditMode = Boolean(editReminder);
   
+  // Set default date to tomorrow
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(12, 0, 0, 0); // Set to noon
+  
   const defaultFormState = {
     title: '',
     description: '',
-    dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16), // Default to tomorrow
+    dueDate: tomorrow.toISOString().slice(0, 16), // Format for datetime-local input
     hoursBeforeDue: 24
   };
   
@@ -35,10 +39,19 @@ const CustomReminderForm = ({ open, onClose, onSuccess, editReminder = null }) =
   // Load data when editing an existing reminder
   useEffect(() => {
     if (editReminder) {
+      // Format date for the datetime-local input
+      let formattedDate = '';
+      try {
+        formattedDate = new Date(editReminder.dueDate).toISOString().slice(0, 16);
+      } catch (err) {
+        console.error('Error formatting date:', err);
+        formattedDate = new Date().toISOString().slice(0, 16);
+      }
+      
       setFormData({
         title: editReminder.title || '',
         description: editReminder.description || '',
-        dueDate: new Date(editReminder.dueDate).toISOString().slice(0, 16),
+        dueDate: formattedDate,
         hoursBeforeDue: editReminder.hoursBeforeDue || 24
       });
     } else {
@@ -55,6 +68,22 @@ const CustomReminderForm = ({ open, onClose, onSuccess, editReminder = null }) =
     }));
   };
   
+  // Check if the notification time has already passed
+  const isPastNotification = () => {
+    if (!formData.dueDate) return false;
+    
+    try {
+      const dueDate = new Date(formData.dueDate);
+      const notificationDate = new Date(dueDate);
+      notificationDate.setHours(notificationDate.getHours() - formData.hoursBeforeDue);
+      
+      return notificationDate < new Date();
+    } catch (err) {
+      console.error('Error calculating notification time:', err);
+      return false;
+    }
+  };
+  
   const handleSubmit = async () => {
     // Validate form
     if (!formData.title) {
@@ -67,78 +96,56 @@ const CustomReminderForm = ({ open, onClose, onSuccess, editReminder = null }) =
       return;
     }
     
-    if (formData.hoursBeforeDue < 1) {
+    if (isNaN(Number(formData.hoursBeforeDue)) || Number(formData.hoursBeforeDue) < 1) {
       setError('Please enter at least 1 hour before due date for notification');
+      return;
+    }
+    
+    // Check if notification date is in the past
+    if (isPastNotification()) {
+      setError('The notification time has already passed. Please adjust the due date or hours before due.');
       return;
     }
     
     try {
       setLoading(true);
+      setError('');
       
-      // Create a date object from the form input
+      // Convert date string to ISO format for API
       const dueDate = new Date(formData.dueDate);
       
-      // Calculate notification date
-      const notificationDate = new Date(dueDate);
-      notificationDate.setHours(notificationDate.getHours() - formData.hoursBeforeDue);
-      
-      // Check if notification date is in the past
-      if (notificationDate < new Date()) {
-        setError('The notification time has already passed. Please adjust the due date or hours before due.');
-        setLoading(false);
-        return;
-      }
-      
-      // Prepare data for API
+      // Prepare data for API submission
       const reminderData = {
-        ...formData,
-        dueDate: dueDate.toISOString()
+        title: formData.title,
+        description: formData.description,
+        dueDate: dueDate.toISOString(), // Send ISO format string
+        hoursBeforeDue: Number(formData.hoursBeforeDue)
       };
       
-      // Send to API
+      console.log('Submitting custom reminder data:', reminderData);
+      
       let response;
       if (isEditMode) {
-        response = await reminderAPI.updateReminder(editReminder._id, {
-          ...reminderData,
-          type: 'custom'
-        });
+        response = await customReminderAPI.updateCustomReminder(editReminder._id, reminderData);
       } else {
-        response = await reminderAPI.createCustomReminder(reminderData);
+        response = await customReminderAPI.createCustomReminder(reminderData);
       }
       
-      setLoading(false);
+      console.log('API response:', response);
       
+      setLoading(false);
       if (response && response.data) {
         onSuccess(response.data);
         onClose();
+      } else {
+        throw new Error('No data returned from API');
       }
     } catch (err) {
       console.error('Error saving reminder:', err);
-      setError('Failed to save reminder. Please try again.');
+      setError(err.response?.data?.message || 'Failed to save reminder. Please try again.');
       setLoading(false);
     }
   };
-  
-  const calculateNotificationTime = () => {
-    if (!formData.dueDate || !formData.hoursBeforeDue) {
-      return null;
-    }
-    
-    const dueDate = new Date(formData.dueDate);
-    const notificationDate = new Date(dueDate);
-    notificationDate.setHours(notificationDate.getHours() - formData.hoursBeforeDue);
-    
-    return notificationDate;
-  };
-  
-  const notificationTime = calculateNotificationTime();
-  const isPastNotification = notificationTime && notificationTime < new Date();
-  const dueDateObj = formData.dueDate ? new Date(formData.dueDate) : null;
-  
-  // Get current date/time in ISO format with timezone adjustment
-  const now = new Date();
-  const timezoneOffset = now.getTimezoneOffset() * 60000;
-  const localISOTime = (new Date(Date.now() - timezoneOffset)).toISOString().slice(0, 16);
   
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
@@ -154,90 +161,74 @@ const CustomReminderForm = ({ open, onClose, onSuccess, editReminder = null }) =
         
         <Box component="form" sx={{ mt: 1 }}>
           <TextField
+            label="Title"
             name="title"
-            label="Reminder Title"
             value={formData.title}
             onChange={handleChange}
             fullWidth
             required
             margin="normal"
-            variant="outlined"
+            error={!formData.title}
+            helperText={!formData.title ? 'Title is required' : ''}
           />
           
           <TextField
-            name="description"
             label="Description"
+            name="description"
             value={formData.description}
             onChange={handleChange}
             fullWidth
             multiline
             rows={3}
             margin="normal"
-            variant="outlined"
           />
           
           <TextField
+            label="Due Date"
             name="dueDate"
-            label="Due Date & Time"
             type="datetime-local"
             value={formData.dueDate}
             onChange={handleChange}
-            InputLabelProps={{
-              shrink: true,
-            }}
-            inputProps={{
-              min: localISOTime
-            }}
             fullWidth
-            margin="normal"
-            variant="outlined"
             required
+            margin="normal"
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <EventIcon />
+                </InputAdornment>
+              ),
+            }}
+            error={!formData.dueDate}
+            helperText={!formData.dueDate ? 'Due date is required' : ''}
           />
           
           <TextField
+            label="Hours Before Due Date for Notification"
             name="hoursBeforeDue"
-            label="Hours Before Due Date"
             type="number"
             value={formData.hoursBeforeDue}
             onChange={handleChange}
             fullWidth
+            required
+            margin="normal"
             inputProps={{ min: 1 }}
             InputProps={{
-              endAdornment: (
-                <InputAdornment position="end">
-                  hours
+              startAdornment: (
+                <InputAdornment position="start">
+                  <NotificationsIcon />
                 </InputAdornment>
               ),
             }}
-            helperText="When to send the notification"
-            sx={{ mt: 2 }}
+            error={isNaN(Number(formData.hoursBeforeDue)) || Number(formData.hoursBeforeDue) < 1}
+            helperText={isNaN(Number(formData.hoursBeforeDue)) || Number(formData.hoursBeforeDue) < 1 ? 
+              'Please enter a valid number greater than 0' : ''}
           />
           
-          {notificationTime && (
-            <Box sx={{ mt: 3, mb: 1, p: 2, bgcolor: 'background.paper', borderRadius: 1 }}>
-              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                Notification Preview
-              </Typography>
-              <Divider sx={{ mb: 2 }} />
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                <EventIcon fontSize="small" sx={{ mr: 1, color: 'primary.main' }} />
-                <Typography variant="body2">
-                  Due: {dueDateObj ? dueDateObj.toLocaleString() : 'Not set'}
-                </Typography>
-              </Box>
-              <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                <NotificationsIcon fontSize="small" sx={{ mr: 1, color: isPastNotification ? 'error.main' : 'primary.main' }} />
-                <Typography variant="body2" color={isPastNotification ? 'error.main' : 'text.primary'}>
-                  Notification: {notificationTime.toLocaleString()}
-                  {isPastNotification && ' (in the past)'}
-                </Typography>
-              </Box>
-              {isPastNotification && (
-                <Alert severity="warning" sx={{ mt: 2 }}>
-                  The notification time has already passed. Please adjust the due date or hours before due.
-                </Alert>
-              )}
-            </Box>
+          {isPastNotification() && (
+            <Alert severity="warning" sx={{ mt: 2 }}>
+              Warning: The notification time has already passed. Please adjust the due date or hours before due.
+            </Alert>
           )}
         </Box>
       </DialogContent>
@@ -249,7 +240,7 @@ const CustomReminderForm = ({ open, onClose, onSuccess, editReminder = null }) =
           onClick={handleSubmit} 
           variant="contained" 
           color="primary" 
-          disabled={loading || isPastNotification}
+          disabled={loading || isPastNotification()}
         >
           {loading ? 'Saving...' : (isEditMode ? 'Update Reminder' : 'Create Reminder')}
         </Button>

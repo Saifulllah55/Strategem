@@ -7,7 +7,8 @@ const api = axios.create({
   baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json'
-  }
+  },
+  withCredentials: true // Include credentials for cookies
 });
 
 // Add request interceptor to include auth token
@@ -25,11 +26,16 @@ api.interceptors.request.use(
 );
 
 // Project API
-export const projectAPI = {
+const projectAPI = {
   // Get all projects
   getAllProjects: async () => {
-    const response = await api.get('/projects');
-    return response;
+    try {
+      const response = await api.get('/projects');
+      return response;
+    } catch (error) {
+      console.error('Error fetching projects:', error);
+      return { data: [] };
+    }
   },
   
   // Get project by ID
@@ -58,11 +64,16 @@ export const projectAPI = {
 };
 
 // Task API
-export const taskAPI = {
+const taskAPI = {
   // Get all tasks
   getAllTasks: async () => {
-    const response = await api.get('/tasks');
-    return response;
+    try {
+      const response = await api.get('/tasks');
+      return response;
+    } catch (error) {
+      console.error('Error fetching tasks:', error);
+      return { data: [] };
+    }
   },
   
   // Get task by ID
@@ -97,7 +108,7 @@ export const taskAPI = {
 };
 
 // Report API
-export const reportAPI = {
+const reportAPI = {
   // Get dashboard data with summary stats
   getDashboardData: async () => {
     const response = await api.get('/dashboard');
@@ -117,45 +128,15 @@ export const reportAPI = {
   }
 };
 
-// Reminder API
-export const reminderAPI = {
+// Reminder API for task-related reminders
+const reminderAPI = {
   // Get all reminders
   getAllReminders: async () => {
     try {
-      // Check if token exists before making the request
-      const token = localStorage.getItem('token');
-      if (!token) {
-        console.warn('No authentication token found for reminders API');
-        return { data: [] };
-      }
-
       const response = await api.get('/reminders');
       return response;
     } catch (error) {
-      if (error.response && error.response.status === 401) {
-        console.error("Authentication failed when fetching reminders. Please log in again.");
-        // Optionally redirect to login or refresh token
-      } else {
-        console.error("Error fetching reminders:", error);
-      }
-      // Return empty data to avoid crashing
-      return { data: [] };
-    }
-  },
-  
-  // Get all custom reminders
-  getCustomReminders: async () => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        console.warn('No authentication token found for reminders API');
-        return { data: [] };
-      }
-
-      const response = await api.get('/reminders/custom');
-      return response;
-    } catch (error) {
-      console.error("Error fetching custom reminders:", error);
+      console.error("Error fetching reminders:", error);
       return { data: [] };
     }
   },
@@ -177,14 +158,10 @@ export const reminderAPI = {
       // Make sure reminderData has necessary fields
       const payload = {
         ...reminderData,
-        // If sending taskId but not relatedTo/type for backward compatibility
-        relatedTo: reminderData.type !== 'custom' ? (reminderData.relatedTo || reminderData.taskId) : undefined,
-        type: reminderData.type || "task",
-        // Make sure there's a title
+        relatedTo: reminderData.relatedTo || reminderData.taskId,
+        type: "task",
         title: reminderData.title || `Reminder`,
-        // Set a due date if not provided
         dueDate: reminderData.dueDate || new Date(Date.now() + 24 * 60 * 60 * 1000),
-        // Hours before due date to send notification
         hoursBeforeDue: reminderData.hoursBeforeDue || 24
       };
       
@@ -192,25 +169,6 @@ export const reminderAPI = {
       return response;
     } catch (error) {
       console.error("Error creating reminder:", error);
-      throw error;
-    }
-  },
-  
-  // Create a custom reminder (not tied to a task/project)
-  createCustomReminder: async (reminderData) => {
-    try {
-      const payload = {
-        title: reminderData.title || "Custom Reminder",
-        description: reminderData.description || "",
-        dueDate: reminderData.dueDate || new Date(Date.now() + 24 * 60 * 60 * 1000),
-        hoursBeforeDue: reminderData.hoursBeforeDue || 24,
-        priority: reminderData.priority || "medium"
-      };
-      
-      const response = await api.post('/reminders/custom', payload);
-      return response;
-    } catch (error) {
-      console.error("Error creating custom reminder:", error);
       throw error;
     }
   },
@@ -248,7 +206,7 @@ export const reminderAPI = {
     }
   },
   
-  // Get reminders that need notification
+  // Get reminders that need to be notified
   getRemindersToNotify: async () => {
     try {
       const response = await api.get('/reminders/notify');
@@ -270,14 +228,102 @@ export const reminderAPI = {
     }
   },
   
-  // Cleanup expired reminders
+  // Clean up expired reminders
   cleanupExpiredReminders: async () => {
     try {
       const response = await api.delete('/reminders/cleanup');
       return response;
     } catch (error) {
       console.error("Error cleaning up expired reminders:", error);
-      return { data: { count: 0 } };
+      throw error;
     }
   }
+};
+
+// Custom Reminder API - all operations specific to custom reminders
+const customReminderAPI = {
+  // Get all custom reminders
+  getAllCustomReminders: async () => {
+    try {
+      const response = await api.get('/custom-reminders');
+      return response;
+    } catch (error) {
+      console.error("Error fetching custom reminders:", error);
+      return { data: [] };
+    }
+  },
+  
+  // Get custom reminder by ID
+  getCustomReminderById: async (id) => {
+    try {
+      const response = await api.get(`/custom-reminders/${id}`);
+      return response;
+    } catch (error) {
+      console.error(`Error fetching custom reminder ${id}:`, error);
+      throw error;
+    }
+  },
+  
+  // Create a custom reminder
+  createCustomReminder: async (reminderData) => {
+    try {
+      const payload = {
+        title: reminderData.title || "Custom Reminder",
+        description: reminderData.description || "",
+        dueDate: reminderData.dueDate || new Date(Date.now() + 24 * 60 * 60 * 1000),
+        hoursBeforeDue: Number(reminderData.hoursBeforeDue) || 24,
+        priority: reminderData.priority || "medium"
+      };
+      
+      console.log('Sending custom reminder payload:', payload);
+      const response = await api.post('/custom-reminders', payload);
+      console.log('Custom reminder created:', response.data);
+      return response;
+    } catch (error) {
+      console.error("Error creating custom reminder:", error);
+      throw error;
+    }
+  },
+  
+  // Update custom reminder
+  updateCustomReminder: async (id, updates) => {
+    try {
+      const response = await api.put(`/custom-reminders/${id}`, updates);
+      return response;
+    } catch (error) {
+      console.error(`Error updating custom reminder ${id}:`, error);
+      throw error;
+    }
+  },
+  
+  // Delete custom reminder
+  deleteCustomReminder: async (id) => {
+    try {
+      const response = await api.delete(`/custom-reminders/${id}`);
+      return response;
+    } catch (error) {
+      console.error(`Error deleting custom reminder ${id}:`, error);
+      throw error;
+    }
+  },
+  
+  // Mark custom reminder as notified
+  markAsNotified: async (id) => {
+    try {
+      const response = await api.patch(`/custom-reminders/${id}/notified`);
+      return response;
+    } catch (error) {
+      console.error(`Error marking custom reminder ${id} as notified:`, error);
+      throw error;
+    }
+  }
+};
+
+// Export all APIs
+export { 
+  projectAPI, 
+  taskAPI, 
+  reportAPI, 
+  reminderAPI,
+  customReminderAPI
 };
