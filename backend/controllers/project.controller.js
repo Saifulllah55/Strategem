@@ -156,7 +156,7 @@ export const getTasksByProjectId = async (req, res) => {
 export const createTaskForProject = async (req, res) => {
   try {
     const { projectId } = req.params;
-    const { title, description, dueDate, assignedTo } = req.body;
+    const { title, description, dueDate, assignedTo, link } = req.body;
     const userId = req.user._id;
 
     const task = new Task({
@@ -165,6 +165,7 @@ export const createTaskForProject = async (req, res) => {
       dueDate,
       project: projectId,
       assignedTo: assignedTo || userId,
+      link: link || { url: "", type: "other" }
     });
 
     await task.save();
@@ -202,7 +203,7 @@ export const createTaskForProject = async (req, res) => {
 export const updateTaskForProject = async (req, res) => {
   try {
     const { taskId } = req.params;
-    const { status, assignedTo } = req.body;
+    const { status, assignedTo, link } = req.body;
     const userId = req.user._id;
 
     const task = await Task.findById(taskId);
@@ -231,6 +232,11 @@ export const updateTaskForProject = async (req, res) => {
       task.assignedTo = assignedTo;
     }
 
+    // Update link if provided
+    if (link) {
+      task.link = link;
+    }
+
     task.status = status;
     await task.save();
 
@@ -252,16 +258,6 @@ export const updateTaskForProject = async (req, res) => {
         activityType,
         activityContent,
         task._id
-      );
-    }
-
-    // Notify assignee on status change
-    if (status && task.assignedTo) {
-      await createNotification(
-        task.assignedTo,
-        "task_status_change",
-        `Status of your task '${task.title}' changed to ${status}`,
-        `/projects/${task.project}`
       );
     }
 

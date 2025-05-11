@@ -19,7 +19,6 @@ const ProjectPage = () => {
 
   const { user } = useSelector((state) => state.auth);
 
-  // Memoized selectors
   const selectProject = useMemo(
     () =>
       createSelector(
@@ -74,7 +73,6 @@ const ProjectPage = () => {
     []
   );
 
-  // Use selectors
   const project = useSelector(selectProject);
   const projectLoading = useSelector(selectProjectLoading);
   const projectError = useSelector(selectProjectError);

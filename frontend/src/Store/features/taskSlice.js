@@ -1,7 +1,6 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import api from "../../lib/axios";
 
-// Async thunk to fetch all tasks for a specific project
 export const fetchTasksByProjectId = createAsyncThunk(
   "tasks/fetchByProjectId",
   async (projectId, { rejectWithValue }) => {
@@ -20,7 +19,6 @@ export const fetchTasksByProjectId = createAsyncThunk(
   }
 );
 
-// Async thunk to create a new task
 export const createTask = createAsyncThunk(
   "tasks/createTask",
   async ({ projectId, taskData }, { rejectWithValue }) => {
@@ -37,7 +35,6 @@ export const createTask = createAsyncThunk(
   }
 );
 
-// Async thunk to update a task (using PUT to update title, assignedTo, and status)
 export const updateTask = createAsyncThunk(
   "tasks/updateTask",
   async ({ taskId, updatedTaskData }, { rejectWithValue }) => {
@@ -52,7 +49,6 @@ export const updateTask = createAsyncThunk(
   }
 );
 
-// Initial state
 const initialState = {
   byId: {},
   allIds: [],
@@ -64,13 +60,11 @@ const initialState = {
   updateError: null,
 };
 
-// Slice
 const taskSlice = createSlice({
   name: "tasks",
   initialState,
   reducers: {},
   extraReducers: (builder) => {
-    // Fetch tasks by project ID
     builder.addCase(fetchTasksByProjectId.pending, (state) => {
       state.fetchLoading = true;
       state.fetchError = null;
@@ -79,7 +73,7 @@ const taskSlice = createSlice({
       state.fetchLoading = false;
       const { tasks } = action.payload;
 
-      console.log("Fetched tasks:", tasks); // Debugging line
+      console.log("Fetched tasks:", tasks);
       tasks.forEach((task) => {
         state.byId[task._id] = task;
         if (!state.allIds.includes(task._id)) {
@@ -92,7 +86,6 @@ const taskSlice = createSlice({
       state.fetchError = action.payload;
     });
 
-    // Create a task
     builder.addCase(createTask.pending, (state) => {
       state.createLoading = true;
       state.createError = null;
@@ -110,7 +103,6 @@ const taskSlice = createSlice({
       state.createError = action.payload;
     });
 
-    // Update task (using PUT)
     builder.addCase(updateTask.pending, (state) => {
       state.updateLoading = true;
       state.updateError = null;
@@ -119,7 +111,6 @@ const taskSlice = createSlice({
       const updatedTask = action.payload;
       state.updateLoading = false;
 
-      // Update the task in the state with the new data
       state.byId[updatedTask._id] = updatedTask;
     });
     builder.addCase(updateTask.rejected, (state, action) => {

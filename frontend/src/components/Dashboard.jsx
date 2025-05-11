@@ -1,7 +1,32 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchProjects } from "../Store/features/projectSlice";
+import { fetchActivities } from "../Store/features/activitySlice";
+import { Line, Bar } from "react-chartjs-2";
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+} from 'chart.js';
+
+// Register ChartJS components
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend
+);
 
 const StatCard = ({ title, value, icon, color }) => (
   <div className="card">
@@ -24,10 +49,106 @@ const Dashboard = () => {
   const { byId, allIds, fetchLoading, fetchError } = useSelector(
     (state) => state.projects
   );
+  const activities = useSelector((state) => state.activities.activities);
 
   useEffect(() => {
     dispatch(fetchProjects());
+    dispatch(fetchActivities());
   }, [dispatch]);
+
+  // Calculate task completion data
+  const taskCompletionData = useMemo(() => {
+    if (!activities || !user) return null;
+
+    // Get last 7 days
+    const last7Days = Array.from({ length: 7 }, (_, i) => {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      return date.toISOString().split('T')[0];
+    }).reverse();
+
+    // Filter activities for task completions by the current user
+    const completedTasks = activities.filter(activity => 
+      (activity.type === 'task_approved' || activity.type === 'task_submitted') && 
+      activity.user._id === user._id
+    );
+
+    // Count completions per day
+    const completionCounts = last7Days.map(date => {
+      return completedTasks.filter(task => 
+        new Date(task.createdAt).toISOString().split('T')[0] === date
+      ).length;
+    });
+
+    return {
+      labels: last7Days.map(date => new Date(date).toLocaleDateString('en-US', { weekday: 'short' })),
+      datasets: [{
+        label: 'Tasks Completed',
+        data: completionCounts,
+        borderColor: 'rgb(59, 130, 246)',
+        backgroundColor: 'rgba(59, 130, 246, 0.5)',
+        tension: 0.4
+      }]
+    };
+  }, [activities, user]);
+
+  // Calculate project-wise task completion
+  const projectCompletionData = useMemo(() => {
+    if (!activities || !user || !byId || !allIds) return null;
+
+    const projectStats = {};
+    const projects = allIds.map(id => byId[id]);
+
+    projects.forEach(project => {
+      projectStats[project._id] = {
+        name: project.name,
+        submitted: 0,
+        approved: 0
+      };
+    });
+
+    activities.forEach(activity => {
+      if (activity.user._id === user._id && activity.project) {
+        if (!projectStats[activity.project._id]) {
+          projectStats[activity.project._id] = {
+            name: activity.project.name,
+            submitted: 0,
+            approved: 0
+          };
+        }
+
+        if (activity.type === 'task_submitted') {
+          projectStats[activity.project._id].submitted++;
+        } else if (activity.type === 'task_approved') {
+          projectStats[activity.project._id].approved++;
+        }
+      }
+    });
+
+    const projectNames = Object.values(projectStats).map(p => p.name);
+    const submittedCounts = Object.values(projectStats).map(p => p.submitted);
+    const approvedCounts = Object.values(projectStats).map(p => p.approved);
+
+    return {
+      labels: projectNames,
+      datasets: [
+        {
+          label: 'Submitted Tasks',
+          data: submittedCounts,
+          backgroundColor: 'rgba(234, 179, 8, 0.5)',
+          borderColor: 'rgb(234, 179, 8)',
+          borderWidth: 1
+        },
+        {
+          label: 'Approved Tasks',
+          data: approvedCounts,
+          backgroundColor: 'rgba(34, 197, 94, 0.5)',
+          borderColor: 'rgb(34, 197, 94)',
+          borderWidth: 1
+        }
+      ]
+    };
+  }, [activities, user, byId, allIds]);
 
   if (!user) {
     return (
@@ -117,6 +238,66 @@ const Dashboard = () => {
               }
               color="success"
             />
+          </div>
+
+          {/* Task Completion Charts */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <div className="card">
+              <h3 className="text-lg font-semibold mb-4">Task Completion Timeline</h3>
+              {taskCompletionData && (
+                <Line
+                  data={taskCompletionData}
+                  options={{
+                    responsive: true,
+                    plugins: {
+                      legend: {
+                        position: 'top',
+                      },
+                      title: {
+                        display: true,
+                        text: 'Tasks Completed Over Time'
+                      }
+                    },
+                    scales: {
+                      y: {
+                        beginAtZero: true,
+                        ticks: {
+                          stepSize: 1
+                        }
+                      }
+                    }
+                  }}
+                />
+              )}
+            </div>
+            <div className="card">
+              <h3 className="text-lg font-semibold mb-4">Project-wise Completion</h3>
+              {projectCompletionData && (
+                <Bar
+                  data={projectCompletionData}
+                  options={{
+                    responsive: true,
+                    plugins: {
+                      legend: {
+                        position: 'top',
+                      },
+                      title: {
+                        display: true,
+                        text: 'Tasks by Project'
+                      }
+                    },
+                    scales: {
+                      y: {
+                        beginAtZero: true,
+                        ticks: {
+                          stepSize: 1
+                        }
+                      }
+                    }
+                  }}
+                />
+              )}
+            </div>
           </div>
 
           {/* Recent Projects */}

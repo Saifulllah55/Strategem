@@ -1,7 +1,6 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import api from "../../lib/axios";
 
-// Thunk to fetch all projects
 export const fetchProjects = createAsyncThunk(
   "projects/fetchAll",
   async (_, { rejectWithValue }) => {
@@ -16,7 +15,6 @@ export const fetchProjects = createAsyncThunk(
   }
 );
 
-// Thunk to fetch a single project by ID
 export const fetchProjectById = createAsyncThunk(
   "projects/fetchById",
   async (projectId, { rejectWithValue, getState }) => {
@@ -37,7 +35,6 @@ export const fetchProjectById = createAsyncThunk(
   }
 );
 
-// Thunk to create a new project
 export const createProject = createAsyncThunk(
   "projects/create",
   async (projectData, { rejectWithValue }) => {
@@ -66,7 +63,6 @@ export const addMembers = createAsyncThunk(
   }
 );
 
-// Initial state
 const initialState = {
   byId: {},
   allIds: [],
@@ -86,7 +82,6 @@ const initialState = {
   addMembersError: null,
 };
 
-// Slice
 const projectSlice = createSlice({
   name: "projects",
   initialState,
@@ -99,7 +94,6 @@ const projectSlice = createSlice({
     },
   },
   extraReducers: (builder) => {
-    // Fetch all projects
     builder.addCase(fetchProjects.pending, (state) => {
       state.fetchAllLoading = true;
       state.fetchAllError = null;
@@ -120,7 +114,6 @@ const projectSlice = createSlice({
       state.fetchAllError = action.payload;
     });
 
-    // Fetch single project by ID
     builder.addCase(fetchProjectById.pending, (state) => {
       state.fetchSingleLoading = true;
       state.fetchSingleError = null;
@@ -138,7 +131,6 @@ const projectSlice = createSlice({
       state.fetchSingleError = action.payload;
     });
 
-    // Create project
     builder.addCase(createProject.pending, (state) => {
       state.createLoading = true;
       state.createError = null;
@@ -159,7 +151,6 @@ const projectSlice = createSlice({
       state.createError = action.payload;
     });
 
-    // Add members
     builder.addCase(addMembers.pending, (state) => {
       state.addMembersLoading = true;
       state.addMembersError = null;
