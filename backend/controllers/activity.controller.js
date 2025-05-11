@@ -4,7 +4,7 @@ export const getProjectActivities = async (req, res) => {
   try {
     const { projectId } = req.params;
     const activities = await Activity.find({ project: projectId })
-      .populate("user", "name")
+      .populate("user", "username")
       .populate("relatedTask", "title")
       .sort({ createdAt: -1 });
 

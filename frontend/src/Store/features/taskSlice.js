@@ -6,7 +6,7 @@ export const fetchTasksByProjectId = createAsyncThunk(
   "tasks/fetchByProjectId",
   async (projectId, { rejectWithValue }) => {
     try {
-      const response = await api.get(`/projects/${projectId}/tasks`);
+      const response = await api.get(`/tasks/${projectId}`);
       console.log("Fetched Response:", response); // Debugging line
       return {
         projectId,

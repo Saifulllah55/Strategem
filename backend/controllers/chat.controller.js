@@ -1,5 +1,6 @@
 import Chat from "../models/chat.model.js";
 import Project from "../models/project.model.js";
+import { createNotification } from "./notification.controller.js";
 
 export const getProjectMessages = async (req, res) => {
   try {
@@ -47,6 +48,19 @@ export const createMessage = async (req, res) => {
 
     // Emit the new message to all connected clients in the project room
     req.app.get("io").to(projectId).emit("newMessage", populatedMessage);
+
+    // Notify all project members except the sender
+    const memberIds = project.members.map(m => m.user.toString()).filter(id => id !== userId.toString());
+    await Promise.all(
+      memberIds.map(id =>
+        createNotification(
+          id,
+          "message",
+          `New message in project '${project.name}': ${content}`,
+          `/projects/${projectId}`
+        )
+      )
+    );
 
     res.status(201).json(populatedMessage);
   } catch (error) {

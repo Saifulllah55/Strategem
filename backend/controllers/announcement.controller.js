@@ -1,6 +1,7 @@
 import Announcement from "../models/announcement.model.js";
 import Project from "../models/project.model.js";
 import { createActivity } from "./activity.controller.js";
+import { createNotification } from "./notification.controller.js";
 
 export const getProjectAnnouncements = async (req, res) => {
   try {
@@ -53,6 +54,18 @@ export const createAnnouncement = async (req, res) => {
       userId,
       "announcement_created",
       `Posted announcement: ${text}`
+    );
+
+    const memberIds = project.members.map(m => m.user.toString()).filter(id => id !== userId.toString());
+    await Promise.all(
+      memberIds.map(id =>
+        createNotification(
+          id,
+          "announcement",
+          `New announcement in project '${project.name}': ${text}`,
+          `/projects/${projectId}`
+        )
+      )
     );
 
     const populatedAnnouncement = await Announcement.findById(announcement._id)

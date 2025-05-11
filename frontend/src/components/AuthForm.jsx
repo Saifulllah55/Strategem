@@ -12,6 +12,7 @@ const AuthForm = ({ signUp }) => {
     password: "",
   });
   const [responseMsg, setResponseMsg] = useState("");
+  const [hasSubmitted, setHasSubmitted] = useState(false);
 
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -32,10 +33,10 @@ const AuthForm = ({ signUp }) => {
   }, [signUp]);
 
   useEffect(() => {
-    if (error) {
+    if (error && hasSubmitted) {
       setResponseMsg(error);
     }
-  }, [error]);
+  }, [error, hasSubmitted]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -45,6 +46,7 @@ const AuthForm = ({ signUp }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setResponseMsg("");
+    setHasSubmitted(true);
 
     const payload = isSignup
       ? credentials

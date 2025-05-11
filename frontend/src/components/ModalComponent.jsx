@@ -8,11 +8,12 @@ import CardTable from './tools/CardTable';
 
 const ModalComponent = ({ title, closeModal,projectId }) => {
   const renderContent = () => {
+    console.log(title);
     switch (title) {
       case 'Message Board':
-        return <Chat/>;
-      case 'To-Dos':
-        return <Tasks />;
+        return <MessageBoard />;
+      case 'To-dos':
+        return <Tasks projectId={projectId} />;
       case 'Docs & Files':
         return <DocsFiles />;
       case 'Chat':
@@ -35,11 +36,11 @@ const ModalComponent = ({ title, closeModal,projectId }) => {
   return (
     <div
       id="modal-overlay"
-      className="fixed inset-0 z-50 bg-[#121620] flex items-center justify-center"
+      className="fixed inset-0 z-50 flex items-center justify-center"
       onClick={handleOverlayClick}
     >
       <div
-        className="bg-[#1c2331] rounded-xl shadow-lg w-[80%] h-[80%] overflow-auto p-6 relative"
+        className="bg-[#121620] rounded-xl w-[80%] h-[80%] overflow-auto p-6 relative shadow-2xl shadow-black/40"
       >
         <button
           className="absolute top-3 right-4 text-white text-xl hover:text-red-400"

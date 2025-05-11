@@ -2,6 +2,7 @@ import Project from "../models/project.model.js";
 import User from "../models/user.model.js";
 import Task from "../models/task.model.js";
 import { createActivity } from "./activity.controller.js";
+import { createNotification } from "./notification.controller.js";
 
 
 
@@ -155,7 +156,7 @@ export const getTasksByProjectId = async (req, res) => {
 export const createTaskForProject = async (req, res) => {
   try {
     const { projectId } = req.params;
-    const { title, description, dueDate } = req.body;
+    const { title, description, dueDate, assignedTo } = req.body;
     const userId = req.user._id;
 
     const task = new Task({
@@ -163,7 +164,7 @@ export const createTaskForProject = async (req, res) => {
       description,
       dueDate,
       project: projectId,
-      assignedTo: userId,
+      assignedTo: assignedTo || userId,
     });
 
     await task.save();
@@ -182,6 +183,16 @@ export const createTaskForProject = async (req, res) => {
       $push: { tasks: task._id },
     });
 
+    // Notify the assignee if not the creator
+    if (task.assignedTo.toString() !== userId.toString()) {
+      await createNotification(
+        task.assignedTo,
+        "task_assignment",
+        `You have been assigned a new task: ${title}`,
+        `/projects/${projectId}`
+      );
+    }
+
     res.status(201).json(task);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -191,12 +202,33 @@ export const createTaskForProject = async (req, res) => {
 export const updateTaskForProject = async (req, res) => {
   try {
     const { taskId } = req.params;
-    const { status } = req.body;
+    const { status, assignedTo } = req.body;
     const userId = req.user._id;
 
     const task = await Task.findById(taskId);
     if (!task) {
       return res.status(404).json({ message: "Task not found" });
+    }
+
+    // Notify on assignment change
+    if (assignedTo && assignedTo !== task.assignedTo.toString()) {
+      // Notify old assignee
+      if (task.assignedTo) {
+        await createNotification(
+          task.assignedTo,
+          "task_assignment_change",
+          `You have been unassigned from task: ${task.title}`,
+          `/projects/${task.project}`
+        );
+      }
+      // Notify new assignee
+      await createNotification(
+        assignedTo,
+        "task_assignment_change",
+        `You have been assigned to task: ${task.title}`,
+        `/projects/${task.project}`
+      );
+      task.assignedTo = assignedTo;
     }
 
     task.status = status;
@@ -220,6 +252,16 @@ export const updateTaskForProject = async (req, res) => {
         activityType,
         activityContent,
         task._id
+      );
+    }
+
+    // Notify assignee on status change
+    if (status && task.assignedTo) {
+      await createNotification(
+        task.assignedTo,
+        "task_status_change",
+        `Status of your task '${task.title}' changed to ${status}`,
+        `/projects/${task.project}`
       );
     }
 
@@ -332,6 +374,18 @@ export const addMembers = async (req, res) => {
       userId,
       "members_added",
       `Added ${uniqueNewMembers.length} new members to the project`
+    );
+
+    // Notify new members
+    await Promise.all(
+      uniqueNewMembers.map(m =>
+        createNotification(
+          m.user,
+          "added_to_project",
+          `You have been added to the project '${project.name}'`,
+          `/projects/${projectId}`
+        )
+      )
     );
 
     const populatedProject = await Project.findById(projectId)
